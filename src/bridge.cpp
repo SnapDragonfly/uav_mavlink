@@ -145,12 +145,12 @@ int MavlinkHandler::mavlink_init(ros::NodeHandle &ros_nh){
         ROS_WARN("Configure warning, using default values!");
     }
 
-    imu_pub = ros_nh.advertise<sensor_msgs::Imu>(MAVLINK_DEFAULT_IMU_TOPIC, 100);
+    imu_pub = ros_nh.advertise<sensor_msgs::Imu>(imu_topic.c_str(), 100);
 
     /*
      * UART initialization from FC
      */
-    uart_fd = open(MAVLINK_DEFAULT_UART_PATH, O_RDWR);
+    uart_fd = open(com_path.c_str(), O_RDWR);
     if (uart_fd < 0) {
         printf("can not open serial port\n");
         return 1;
@@ -193,8 +193,8 @@ int MavlinkHandler::mavlink_init(ros::NodeHandle &ros_nh){
     }
     memset(&ipc_addr, 0, sizeof(ipc_addr));
     ipc_addr.sun_family = AF_UNIX;
-    strcpy(ipc_addr.sun_path, MAVLINK_DEFAULT_IPC_PATH1);
-    unlink(MAVLINK_DEFAULT_IPC_PATH1);
+    strcpy(ipc_addr.sun_path, ipc1_path.c_str());
+    unlink(ipc1_path.c_str());
     if (bind(ipc_fd, (const struct sockaddr *)&ipc_addr, sizeof(ipc_addr)) < 0) {
         printf("bind local failed\n");
         return 1;
@@ -208,8 +208,8 @@ int MavlinkHandler::mavlink_init(ros::NodeHandle &ros_nh){
     }
     memset(&ipc_addr2, 0, sizeof(ipc_addr2));
     ipc_addr2.sun_family = AF_UNIX;
-    strcpy(ipc_addr2.sun_path, MAVLINK_DEFAULT_IPC_PATH2);
-    unlink(MAVLINK_DEFAULT_IPC_PATH2);
+    strcpy(ipc_addr2.sun_path, ipc2_path.c_str());
+    unlink(ipc2_path.c_str());
     if (bind(ipc_fd2, (const struct sockaddr *)&ipc_addr2, sizeof(ipc_addr2)) < 0) {
         printf("bind local failed\n");
         return 1;

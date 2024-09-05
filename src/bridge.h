@@ -4,6 +4,7 @@
 #include <sensor_msgs/Imu.h>
 
 #include <poll.h>
+#include <netinet/in.h>
 
 #include "config.h"
 
@@ -20,19 +21,27 @@ public:
 
 private:
     // Private methods
+    int uart_create();
+    int udp_create();
+    int ipc1_create();
+    int ipc2_create();
+
     int uart_poll();
+    int udp_poll();
+    int mavlink_handler(unsigned char *buf, int len);
+    void cc_send(unsigned char *buf, int len);
+
     int ipc1_poll();
     int ipc2_poll();
+
     int config_read();
     void config_print(std::string title);
-    
+
     // Member variables
     struct pollfd pfds[MAVLINK_DEFAULT_NUM_PFDS];
     unsigned char buf[MAVLINK_DEFAULT_BUF_LEN];
 
-    int uart_fd;
-    int ipc_fd;
-    int ipc_fd2;
+    int uart_fd, udp_fd, ipc_fd, ipc_fd2;
     ros::Publisher imu_pub;
 
     uint8_t mav_sysid = 0;
@@ -46,8 +55,13 @@ private:
 
     std::string mavlink_activate;
     int mavlink_rate;
+    bool uart_enable;
     std::string com_path;
+
     int com_port;
+    struct sockaddr_in com_client_addr;
+    socklen_t com_client_len;
+
     std::string ipc1_path;
     std::string ipc2_path;
     std::string imu_topic;

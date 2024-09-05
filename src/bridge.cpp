@@ -17,7 +17,6 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <arpa/inet.h>
-#include <netinet/in.h>
 #include <math.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -67,6 +66,7 @@ int MavlinkHandler::config_read(){
     try {
         // Default settings:
         mavlink_activate = TAG_UART;
+        uart_enable      = true;
         mavlink_rate     = MAVLINK_DEFAULT_RATE;
         com_path         = MAVLINK_DEFAULT_UART_PATH;
         com_port         = MAVLINK_DEFAULT_UDP_PORT;
@@ -102,9 +102,11 @@ int MavlinkHandler::config_read(){
             std::string com_type = uav_com[i][TAG_TYPE].as<std::string>();
             if (com_type == TAG_UART) {
                 com_path = uav_com[i][TAG_PATH].as<std::string>();
+                uart_enable = true;
                 //ROS_INFO("%s: %s", TAG_UART, com_path.c_str());
             } else if (com_type == TAG_UDP) {
                 com_port = uav_com[i][TAG_PORT].as<int>();
+                uart_enable = false;
                 //ROS_INFO("%s: %d", TAG_UDP, com_port);
             }
         }
@@ -137,18 +139,8 @@ int MavlinkHandler::config_read(){
     return 0;
 }
 
-
-int MavlinkHandler::mavlink_init(ros::NodeHandle &ros_nh){
-    struct sockaddr_un ipc_addr, ipc_addr2;
+int MavlinkHandler::uart_create(){
     struct termios tty; // Create new termios struc, we call it 'tty' for convention
-
-    int ret = config_read();
-    if(0 != ret){
-        ROS_WARN("Configure warning, using default values!");
-    }
-    config_print("configuration");
-
-    imu_pub = ros_nh.advertise<sensor_msgs::Imu>(imu_topic.c_str(), 100);
 
     /*
      * UART initialization from FC
@@ -188,6 +180,40 @@ int MavlinkHandler::mavlink_init(ros::NodeHandle &ros_nh){
         return 3;
     }
 
+    return 0;
+}
+
+int MavlinkHandler::udp_create(){
+    struct sockaddr_in server_addr;
+
+    // Create a UDP socket
+    udp_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (udp_fd < 0) {
+        ROS_ERROR("Create socket failed.");
+        return 4;
+    }
+
+    memset(&server_addr, 0, sizeof(server_addr));
+    memset(&com_client_addr, 0, sizeof(com_client_addr));
+
+    // Server information
+    server_addr.sin_family = AF_INET;  // IPv4
+    server_addr.sin_addr.s_addr = INADDR_ANY;  // Local IP
+    server_addr.sin_port = htons(com_port);  // Port
+
+    // Bind the socket
+    if (bind(udp_fd, (const struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        ROS_ERROR("Bind local socket failed");
+        close(udp_fd);
+        return 5;
+    }
+
+    return 0;
+}
+
+int MavlinkHandler::ipc1_create(){
+    struct sockaddr_un ipc_addr;
+
     /*
      * IPC initialization for ???
      */
@@ -201,10 +227,17 @@ int MavlinkHandler::mavlink_init(ros::NodeHandle &ros_nh){
     unlink(ipc1_path.c_str());
     if (bind(ipc_fd, (const struct sockaddr *)&ipc_addr, sizeof(ipc_addr)) < 0) {
         ROS_ERROR("Bind local ipc path failed");
+        close(ipc_fd);
         return 5;
     }
 
-    /*
+    return 0;
+}
+
+int MavlinkHandler::ipc2_create(){
+    struct sockaddr_un ipc_addr2;
+
+   /*
      * IPC initialization for ???
      */
     if ((ipc_fd2 = socket(AF_UNIX, SOCK_DGRAM, 0)) < 0) {
@@ -217,14 +250,50 @@ int MavlinkHandler::mavlink_init(ros::NodeHandle &ros_nh){
     unlink(ipc2_path.c_str());
     if (bind(ipc_fd2, (const struct sockaddr *)&ipc_addr2, sizeof(ipc_addr2)) < 0) {
         ROS_ERROR("Bind local ipc path failed");
+        close(ipc_fd2);
         return 7;
     }
 
+    return 0;
+}
+
+int MavlinkHandler::mavlink_init(ros::NodeHandle &ros_nh){
+
+    int ret = config_read();
+    if(0 != ret){
+        ROS_WARN("Configure warning, using default values!");
+    }
+    config_print("configuration");
+
+    imu_pub = ros_nh.advertise<sensor_msgs::Imu>(imu_topic.c_str(), 100);
+
+    if (uart_enable){
+        ret = uart_create();
+    } else {
+        ret = udp_create();
+    }
+    
+    if(0 != ret){
+        return ret;
+    }
+    ret = ipc1_create();
+    if(0 != ret){
+        return ret;
+    }
+    ret = ipc2_create();
+    if(0 != ret){
+        return ret;
+    }
     /*
-     * Polling array
+     * Polling array preparation
      */
-    pfds[0].fd= uart_fd;
+    if (uart_enable) {
+        pfds[0].fd= uart_fd;
+    } else {
+        pfds[0].fd= udp_fd;
+    }
     pfds[0].events = POLLIN;
+
     pfds[1].fd= ipc_fd;
     pfds[1].events = POLLIN;
     pfds[2].fd= ipc_fd2;
@@ -233,19 +302,12 @@ int MavlinkHandler::mavlink_init(ros::NodeHandle &ros_nh){
     return 0;
 }
 
-int MavlinkHandler::uart_poll(){
+int MavlinkHandler::mavlink_handler(unsigned char *buf, int len){
     struct timeval tv;
-    unsigned int len;
-    ssize_t avail;
     mavlink_status_t status;
     mavlink_message_t msg;
-
-    if (!(pfds[0].revents & POLLIN)) {
-        return 1;
-    }
-
-    avail = read(uart_fd, buf, MAVLINK_DEFAULT_BUF_LEN);
-    for (int i = 0; i < avail; i++) {
+    
+   for (int i = 0; i < len; i++) {
         if (mavlink_parse_char(0, buf[i], &msg, &status)) {
             if (msg.sysid == 255) continue;
             //ROS_INFO("recv msg ID %d, seq %d\n", msg.msgid, msg.seq);
@@ -260,25 +322,25 @@ int MavlinkHandler::uart_poll(){
                     gettimeofday(&tv, NULL);
                     mavlink_msg_timesync_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, 0, tv.tv_sec*1000000+tv.tv_usec, mav_sysid, 1); //fill timesync with us instead of ns
                     len = mavlink_msg_to_send_buffer(buf, &msg);
-                    write(uart_fd, buf, len);
+                    cc_send(buf, len);
 
                     mavlink_msg_system_time_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, tv.tv_sec*1000000+tv.tv_usec, 0);
                     len = mavlink_msg_to_send_buffer(buf, &msg);
-                    write(uart_fd, buf, len);
+                    cc_send(buf, len);
 
                     mavlink_msg_set_gps_global_origin_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, mav_sysid, 247749434, 1210443077, 100000, tv.tv_sec*1000000+tv.tv_usec);
                     len = mavlink_msg_to_send_buffer(buf, &msg);
-                    write(uart_fd, buf, len);
+                    cc_send(buf, len);
                 }
                 if (no_hr_imu) {
                     mavlink_msg_command_long_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, 0, 0, MAV_CMD_SET_MESSAGE_INTERVAL, 0, MAVLINK_MSG_ID_HIGHRES_IMU, 10000, 0, 0, 0, 0, 0);
                     len = mavlink_msg_to_send_buffer(buf, &msg);
-                    write(uart_fd, buf, len);
+                    cc_send(buf, len);
                 }
                 if (no_att_q) {
                     mavlink_msg_command_long_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, 0, 0, MAV_CMD_SET_MESSAGE_INTERVAL, 0, MAVLINK_MSG_ID_ATTITUDE_QUATERNION, 10000, 0, 0, 0, 0, 0);
                     len = mavlink_msg_to_send_buffer(buf, &msg);
-                    write(uart_fd, buf, len);
+                    cc_send(buf, len);
                 }
                 if (hb.custom_mode == COPTER_MODE_GUIDED) {
                     if (demo_stage == 0) {
@@ -286,7 +348,7 @@ int MavlinkHandler::uart_poll(){
                         gettimeofday(&tv, NULL);
                         mavlink_msg_command_long_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, mav_sysid, 1, MAV_CMD_NAV_TAKEOFF, 0, 0, 0, 0, 0, 0, 0, 1);
                         len = mavlink_msg_to_send_buffer(buf, &msg);
-                        write(uart_fd, buf, len);
+                        cc_send(buf, len);
                     }
                 } else {
                     demo_stage = 0;
@@ -353,6 +415,35 @@ int MavlinkHandler::uart_poll(){
     return 0;
 }
 
+int MavlinkHandler::uart_poll(){
+
+    if (!(pfds[0].revents & POLLIN)) {
+        return 1;
+    }
+
+    ssize_t len = read(uart_fd, buf, MAVLINK_DEFAULT_BUF_LEN);
+    return mavlink_handler(buf, len);
+}
+
+int MavlinkHandler::udp_poll(){
+
+    if (!(pfds[0].revents & POLLIN)) {
+        return 1;
+    }
+
+    com_client_len = sizeof(com_client_addr);
+    int len = recvfrom(udp_fd, buf, MAVLINK_DEFAULT_BUF_LEN, 0, (struct sockaddr *)&com_client_addr, &com_client_len);
+    return mavlink_handler(buf, len);
+}
+
+void MavlinkHandler::cc_send(unsigned char *buf, int len){
+    if(uart_enable) {
+        write(uart_fd, buf, len);
+    } else {
+        sendto(udp_fd, buf, len, 0, (struct sockaddr *)&com_client_addr, com_client_len);
+    }
+}
+
 int MavlinkHandler::ipc1_poll(){
     float pose[10];
     struct timeval tv;
@@ -378,13 +469,13 @@ int MavlinkHandler::ipc1_poll(){
     mavlink_msg_att_pos_mocap_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, 
                                   &msg, tv.tv_sec*1000000+tv.tv_usec, pose, pose[4], -pose[5], -pose[6], covar);
     len = mavlink_msg_to_send_buffer(buf, &msg);
-    write(uart_fd, buf, len);
+    cc_send(buf, len);
     
     gettimeofday(&tv, NULL);
     mavlink_msg_vision_speed_estimate_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, 
                                           &msg, tv.tv_sec*1000000+tv.tv_usec, pose[7], -pose[8], -pose[9], covar, 0);
     len = mavlink_msg_to_send_buffer(buf, &msg);
-    write(uart_fd, buf, len);
+    cc_send(buf, len);
 
     if (demo_stage == 1 && (latest_alt - gnd_alt) > 0.5f) {
         demo_stage = 2;
@@ -393,13 +484,13 @@ int MavlinkHandler::ipc1_poll(){
                                                       &msg, tv.tv_sec*1000+tv.tv_usec*0.001, 0, 0, 
                                                        MAV_FRAME_BODY_OFFSET_NED, 0x0DF8, 5, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0);
         len = mavlink_msg_to_send_buffer(buf, &msg);
-        write(uart_fd, buf, len);
+        cc_send(buf, len);
     } else if ((demo_stage == 2 || demo_stage == 3) && (latest_x - start_x) > 4.5f) {
         demo_stage = 100;
         gettimeofday(&tv, NULL);
         mavlink_msg_set_mode_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, mav_sysid, 1, 9);
         len = mavlink_msg_to_send_buffer(buf, &msg);
-        write(uart_fd, buf, len);
+        cc_send(buf, len);
     }
 
     return 0;
@@ -424,13 +515,13 @@ int MavlinkHandler::ipc2_poll(){
                                                           &msg, tv.tv_sec*1000+tv.tv_usec*0.001, 0, 0, 
                                                            MAV_FRAME_BODY_OFFSET_NED, 0x0DF8, 1, 1.5f, -0.5f, 0, 0, 0, 0, 0, 0, 0, 0);
             len = mavlink_msg_to_send_buffer(buf, &msg);
-            write(uart_fd, buf, len);
+            cc_send(buf, len);
 
             mavlink_msg_set_position_target_local_ned_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, 
                                                           &msg, tv.tv_sec*1000+tv.tv_usec*0.001, 0, 0, 
                                                            MAV_FRAME_BODY_OFFSET_NED, 0x0DF8 | 4096, 4, 0, -1, 0, 0, 0, 0, 0, 0, 0, 0);
             len = mavlink_msg_to_send_buffer(buf, &msg);
-            write(uart_fd, buf, len);
+            cc_send(buf, len);
         }
     }
 
@@ -444,7 +535,12 @@ int MavlinkHandler::mavlink_poll(){
     int ret = poll(pfds, MAVLINK_DEFAULT_NUM_PFDS, 5000);
 
     if (ret > 0) {
-        uart_poll();
+        if(uart_enable){
+            uart_poll();
+        } else {
+            udp_poll();
+        }
+        
         ipc1_poll();
         ipc2_poll();
     }
@@ -452,7 +548,11 @@ int MavlinkHandler::mavlink_poll(){
 }
 
 int MavlinkHandler::mavlink_exit(){
-    close(uart_fd);
+    if (uart_enable) {
+        close(uart_fd);
+    } else {
+        close(udp_fd);
+    }
     close(ipc_fd);
     close(ipc_fd2);
     return 0;

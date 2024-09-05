@@ -13,13 +13,25 @@ imx415 --CSI--> ssc338q(OpenIPC) <--USB--> rtl8812au
                 H743 FC(Ardupilot)   JetsonOrin(VINS Mono+ego Planner)
 ```
 
+or
+
+```
+imx415 --CSI--> ssc338q(OpenIPC) <--USB--> rtl8812au
+                       ^                       ^
+                       |                       |
+                      UART                    WiFi
+                       |                       |
+                       v                       v
+             H743 FC(Ardupilot) <--UART-->  JetsonOrin(VINS Mono+ego Planner)
+```
+
 - software diagram
 ```
-H743 FC(Ardupilot)  <-- uav_mavlink --> ego Planner
-                           ^
-                           |
-                           v
-                        VINS Mono
+H743 FC(Ardupilot)  <--UART/WiFi-- uav_mavlink --> ego Planner
+                                        ^
+                                        |
+                                        v
+                                    VINS Mono
 ```
 
 *Note: Diagram is from [Ardupilot FollowMe Test Platform Build](https://blog.csdn.net/lida2003/article/details/141649074).*

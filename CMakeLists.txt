@@ -3,11 +3,15 @@ project(uav_mavlink)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(yaml-cpp_DIR "/usr/lib/aarch64-linux-gnu/cmake/yaml-cpp")
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
+  yaml-cpp
   roscpp
   rospy
   std_msgs
@@ -147,7 +151,7 @@ add_executable(${PROJECT_NAME} src/main.cpp src/bridge.cpp)
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(${PROJECT_NAME}
-  ${catkin_LIBRARIES}
+  ${catkin_LIBRARIES} yaml-cpp stdc++fs
 )
 
 #############

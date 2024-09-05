@@ -1,4 +1,9 @@
 
+#include <iostream>
+#include <string>
+#include <filesystem>  // C++17
+
+#include <yaml-cpp/yaml.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
@@ -25,9 +30,120 @@
 #include "bridge.h"
 
 
+#define TAG_TYPE_IPC  "ipcs"
+#define TAG_TYPE_IPC1 "ipc1"
+#define TAG_TYPE_IPC2 "ipc2"
+#define TAG_TYPE_UART "uart"
+#define TAG_TYPE_UDP  "udp"
+
+#define TAG_TYPE "type"
+#define TAG_PATH "path"
+#define TAG_PORT "port"
+#define TAG_UART "uart"
+#define TAG_UDP  "udp"
+
+#define TAG_UAV_COM      "uav_com"
+#define TAG_UAV_IMU      "uav_imu"
+#define TAG_UAV_ACTIVATE "mavlink_activate"
+#define TAG_UAV_RATE     "mavlink_rate"
+
+void MavlinkHandler::config_print(std::string title){
+    ROS_INFO("title: %s ------------->", title.c_str());
+    ROS_INFO("uav acti: %s", mavlink_activate.c_str());
+    ROS_INFO("uav rate: %d", mavlink_rate);
+    ROS_INFO("uart: %s", com_path.c_str());
+    ROS_INFO(" udp: %d", com_port);
+    ROS_INFO("ipc1: %s", ipc1_path.c_str());
+    ROS_INFO("ipc2: %s", ipc2_path.c_str());
+    ROS_INFO(" imu: %s", imu_topic.c_str());
+    ROS_INFO("title: %s <-------------", title.c_str());
+}
+
+int MavlinkHandler::config_read(){
+    try {
+        // Default settings:
+        mavlink_activate = "uart";
+        mavlink_rate     = MAVLINK_DEFAULT_RATE;
+        com_path         = MAVLINK_DEFAULT_UART_PATH;
+        com_port         = MAVLINK_DEFAULT_UDP_PORT;
+        ipc1_path        = MAVLINK_DEFAULT_IPC_PATH1;
+        ipc2_path        = MAVLINK_DEFAULT_IPC_PATH2;
+        imu_topic        = MAVLINK_DEFAULT_IMU_TOPIC;
+
+        config_print("before");
+
+        // Get the current working directory
+        std::filesystem::path work_path = std::filesystem::current_path();
+        //ROS_INFO("Current working directory: %s", work_path.c_str());
+
+        // Construct the absolute path to the config file
+        std::filesystem::path config_path = work_path / "src" / PACKAGE_NAME / PACKAGE_CONFIG;
+        //ROS_INFO("Config file path: %s", config_path.c_str());
+
+        // Load the YAML file
+        YAML::Node config = YAML::LoadFile(config_path.c_str());
+
+        // Access values from the YAML file
+        mavlink_activate = config[TAG_UAV_ACTIVATE].as<std::string>();
+        mavlink_rate = config[TAG_UAV_RATE].as<int>();
+        imu_topic = config[TAG_UAV_IMU].as<std::string>();
+        
+        //ROS_INFO("%s: %s", TAG_UAV_ACTIVATE, mavlink_activate.c_str());
+        //ROS_INFO("%s: %d", TAG_UAV_RATE, mavlink_rate);
+        //ROS_INFO("%s: %d", TAG_UAV_IMU, imu_topic);
+
+        // Access uav communications
+        const YAML::Node &uav_com = config[TAG_UAV_COM];
+        for (std::size_t i = 0; i < uav_com.size(); i++) {
+            std::string com_type = uav_com[i][TAG_TYPE].as<std::string>();
+            if (com_type == TAG_UART) {
+                com_path = uav_com[i][TAG_PATH].as<std::string>();
+                //ROS_INFO("%s: %s", TAG_UART, com_path.c_str());
+            } else if (com_type == TAG_UDP) {
+                com_port = uav_com[i][TAG_PORT].as<int>();
+                //ROS_INFO("%s: %d", TAG_UDP, com_port);
+            }
+        }
+
+        // Access array of ipcs
+        const YAML::Node &ipcs = config[TAG_TYPE_IPC];
+        for (std::size_t i = 0; i < ipcs.size(); i++) {
+            std::string ipc_type = ipcs[i][TAG_TYPE].as<std::string>();
+            if (ipc_type == TAG_TYPE_IPC1) {
+                ipc1_path = ipcs[i][TAG_PATH].as<std::string>();
+                //ROS_INFO("%s: %s", TAG_PATH, ipc1_path.c_str());
+            } else if (ipc_type == TAG_TYPE_IPC2) {
+                ipc2_path = ipcs[i][TAG_PATH].as<std::string>();
+                //ROS_INFO("%s: %s", TAG_TYPE_IPC2, ipc2_path.c_str());
+            }
+        }
+
+        config_print("end");
+    }
+    catch (const std::runtime_error& e) {
+        ROS_ERROR("Runtime error: %s", e.what());
+        return 1;  // Return a non-zero value to indicate an error occurred
+    }
+    catch (const std::exception& e) {
+        ROS_ERROR("Exception: %s", e.what());
+        return 2;  // Return a non-zero value to indicate an error occurred
+    }
+    catch (...) {
+        ROS_ERROR("Unknown exception occurred");
+        return 3;  // Return a non-zero value to indicate an error occurred
+    }
+    return 0;
+}
+
+
 int MavlinkHandler::mavlink_init(ros::NodeHandle &ros_nh){
     struct sockaddr_un ipc_addr, ipc_addr2;
     struct termios tty; // Create new termios struc, we call it 'tty' for convention
+
+    int ret = config_read();
+    if(0 != ret){
+        ROS_WARN("Configure warning, using default values!");
+    }
 
     imu_pub = ros_nh.advertise<sensor_msgs::Imu>(MAVLINK_DEFAULT_IMU_TOPIC, 100);
 
@@ -336,3 +452,4 @@ int MavlinkHandler::mavlink_exit(){
     close(ipc_fd2);
     return 0;
 }
+

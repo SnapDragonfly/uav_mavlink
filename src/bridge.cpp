@@ -51,8 +51,12 @@ void MavlinkHandler::config_print(std::string title){
     ROS_INFO("title: %s ------------->", title.c_str());
     ROS_INFO("uav acti: %s", mavlink_activate.c_str());
     ROS_INFO("uav rate: %d", mavlink_rate);
-    ROS_INFO("uart: %s", com_path.c_str());
-    ROS_INFO(" udp: %d", com_port);
+    if (TAG_UART == mavlink_activate){
+        ROS_INFO("uart: %s", com_path.c_str());
+    } else {
+       ROS_INFO(" udp: %d", com_port);
+    }
+    
     ROS_INFO("ipc1: %s", ipc1_path.c_str());
     ROS_INFO("ipc2: %s", ipc2_path.c_str());
     ROS_INFO(" imu: %s", imu_topic.c_str());
@@ -62,7 +66,7 @@ void MavlinkHandler::config_print(std::string title){
 int MavlinkHandler::config_read(){
     try {
         // Default settings:
-        mavlink_activate = "uart";
+        mavlink_activate = TAG_UART;
         mavlink_rate     = MAVLINK_DEFAULT_RATE;
         com_path         = MAVLINK_DEFAULT_UART_PATH;
         com_port         = MAVLINK_DEFAULT_UDP_PORT;
@@ -70,7 +74,7 @@ int MavlinkHandler::config_read(){
         ipc2_path        = MAVLINK_DEFAULT_IPC_PATH2;
         imu_topic        = MAVLINK_DEFAULT_IMU_TOPIC;
 
-        config_print("before");
+        //config_print("before");
 
         // Get the current working directory
         std::filesystem::path work_path = std::filesystem::current_path();
@@ -117,8 +121,6 @@ int MavlinkHandler::config_read(){
                 //ROS_INFO("%s: %s", TAG_TYPE_IPC2, ipc2_path.c_str());
             }
         }
-
-        config_print("end");
     }
     catch (const std::runtime_error& e) {
         ROS_ERROR("Runtime error: %s", e.what());
@@ -144,6 +146,7 @@ int MavlinkHandler::mavlink_init(ros::NodeHandle &ros_nh){
     if(0 != ret){
         ROS_WARN("Configure warning, using default values!");
     }
+    config_print("configuration");
 
     imu_pub = ros_nh.advertise<sensor_msgs::Imu>(imu_topic.c_str(), 100);
 
@@ -152,13 +155,13 @@ int MavlinkHandler::mavlink_init(ros::NodeHandle &ros_nh){
      */
     uart_fd = open(com_path.c_str(), O_RDWR);
     if (uart_fd < 0) {
-        printf("can not open serial port\n");
+        ROS_ERROR("Can not open serial port %s.", com_path.c_str());
         return 1;
     }
 
     if(tcgetattr(uart_fd, &tty) != 0) {
-        printf("Error %i from tcgetattr: %s\n", errno, strerror(errno));
-        return 1;
+        ROS_ERROR("Error %i from tcgetattr: %s", errno, strerror(errno));
+        return 2;
     }
     tty.c_cflag &= ~PARENB; // Clear parity bit, disabling parity (most common)
     tty.c_cflag &= ~CSTOPB; // Clear stop field, only one stop bit used in communication (most common)
@@ -179,40 +182,42 @@ int MavlinkHandler::mavlink_init(ros::NodeHandle &ros_nh){
     tty.c_cc[VMIN] = 0;
     cfsetispeed(&tty, B1500000);
     cfsetospeed(&tty, B1500000);
-    // Save tty settings, also checking for error
-    if (tcsetattr(uart_fd, TCSANOW, &tty) != 0) {
-        printf("Error %i from tcsetattr: %s\n", errno, strerror(errno));
-        return 1;
+    
+    if (tcsetattr(uart_fd, TCSANOW, &tty) != 0) {  // Save tty settings, also checking for error
+        ROS_ERROR("Error %i from tcsetattr: %s", errno, strerror(errno));
+        return 3;
     }
 
     /*
      * IPC initialization for ???
      */
     if ((ipc_fd = socket(AF_UNIX, SOCK_DGRAM, 0)) < 0) {
-        return 1;
+        ROS_ERROR("Create socket failed.");
+        return 4;
     }
     memset(&ipc_addr, 0, sizeof(ipc_addr));
     ipc_addr.sun_family = AF_UNIX;
     strcpy(ipc_addr.sun_path, ipc1_path.c_str());
     unlink(ipc1_path.c_str());
     if (bind(ipc_fd, (const struct sockaddr *)&ipc_addr, sizeof(ipc_addr)) < 0) {
-        printf("bind local failed\n");
-        return 1;
+        ROS_ERROR("Bind local ipc path failed");
+        return 5;
     }
 
     /*
      * IPC initialization for ???
      */
     if ((ipc_fd2 = socket(AF_UNIX, SOCK_DGRAM, 0)) < 0) {
-        return 1;
+        ROS_ERROR("Create socket failed.");
+        return 6;
     }
     memset(&ipc_addr2, 0, sizeof(ipc_addr2));
     ipc_addr2.sun_family = AF_UNIX;
     strcpy(ipc_addr2.sun_path, ipc2_path.c_str());
     unlink(ipc2_path.c_str());
     if (bind(ipc_fd2, (const struct sockaddr *)&ipc_addr2, sizeof(ipc_addr2)) < 0) {
-        printf("bind local failed\n");
-        return 1;
+        ROS_ERROR("Bind local ipc path failed");
+        return 7;
     }
 
     /*
@@ -243,13 +248,13 @@ int MavlinkHandler::uart_poll(){
     for (int i = 0; i < avail; i++) {
         if (mavlink_parse_char(0, buf[i], &msg, &status)) {
             if (msg.sysid == 255) continue;
-            //printf("recv msg ID %d, seq %d\n", msg.msgid, msg.seq);
+            //ROS_INFO("recv msg ID %d, seq %d\n", msg.msgid, msg.seq);
             if (msg.msgid == MAVLINK_MSG_ID_HEARTBEAT) {
                 mavlink_heartbeat_t hb;
                 mavlink_msg_heartbeat_decode(&msg, &hb);
                 if (msg.sysid != mav_sysid) {
                     mav_sysid = msg.sysid;
-                    printf("found MAV %d\n", msg.sysid);
+                    ROS_INFO("found MAV %d", msg.sysid);
                 }
                 if (time_offset_us == 0) {
                     gettimeofday(&tv, NULL);
@@ -290,7 +295,7 @@ int MavlinkHandler::uart_poll(){
                     if (gnd_alt == 0) {
                         gnd_alt = latest_alt;
                         start_x = latest_x;
-                        printf("gnd viso alt %f, start x %f\n", gnd_alt, start_x);
+                        ROS_INFO("gnd viso alt %f, start x %f\n", gnd_alt, start_x);
                     }
                 } else {
                     gnd_alt = 0;
@@ -300,12 +305,12 @@ int MavlinkHandler::uart_poll(){
                 mavlink_msg_timesync_decode(&msg, &ts);
                 if (ts.tc1 != 0) {
                     time_offset_us = ts.ts1 - ts.tc1;
-                    printf("time offset %ld\n", time_offset_us);
+                    ROS_INFO("time offset %ld", time_offset_us);
                 }
             } else if (msg.msgid == MAVLINK_MSG_ID_STATUSTEXT) {
                 mavlink_statustext_t txt;
                 mavlink_msg_statustext_decode(&msg, &txt);
-                printf("fc: %s\n", txt.text);
+                ROS_INFO("fc: %s", txt.text);
         } else if (msg.msgid == MAVLINK_MSG_ID_HIGHRES_IMU) {
                 no_hr_imu = false;
                 mavlink_highres_imu_t hr_imu;

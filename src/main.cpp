@@ -15,17 +15,20 @@ int main(int argc, char *argv[]) {
     int ret = mavlink_bridge.mavlink_init(ros_nh);
     if (0 != ret){
         ROS_ERROR("%s: init error(%d)", PACKAGE_NAME, ret);
+        return ret;
     }
     while (ros::ok()) {
         ret = mavlink_bridge.mavlink_poll();
         if (0 != ret){
             ROS_ERROR("%s loop error(%d)", PACKAGE_NAME, ret);
+            return ret;
         }
     }
 
     ret = mavlink_bridge.mavlink_exit();
     if (0 != ret){
         ROS_ERROR("%s: exit error(%d)", PACKAGE_NAME, ret);
+        return ret;
     }
 
     ROS_INFO("%s: bye bye", PACKAGE_NAME);

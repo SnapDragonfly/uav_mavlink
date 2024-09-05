@@ -7,3 +7,5 @@
 #define MAVLINK_DEFAULT_IPC_PATH1 "/tmp/chobits_server"
 #define MAVLINK_DEFAULT_IPC_PATH2 "/tmp/chobits_server2"
 #define MAVLINK_DEFAULT_IMU_TOPIC "/chobits/imu"
+
+#define MAVLINK_DEFAULT_BUF_LEN   512

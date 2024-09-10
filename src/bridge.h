@@ -19,15 +19,19 @@ public:
     int mavlink_poll();
     int mavlink_exit();
 
+    bool mvalink_debug();
+
 private:
     // Private methods
     int uart_create();
     int udps_create();
+    int udpc_create();
     int ipc1_create();
     int ipc2_create();
 
     int uart_poll();
     int udps_poll();
+    int udpc_poll();
     int mavlink_handler(unsigned char *buf, int len);
     void cc_send(unsigned char *buf, int len);
 
@@ -35,6 +39,7 @@ private:
     int ipc2_poll();
 
     int config_read();
+
     void config_print(std::string title);
 
     // Member variables
@@ -55,14 +60,23 @@ private:
 
     std::string mavlink_activate;
     int mavlink_rate;
-    bool uart_enable;
-    std::string com_path;
 
-    int com_port;
-    struct sockaddr_in com_client_addr;
-    socklen_t com_client_len;
+    enum ComType {
+        COM_UART,
+        COM_UDPS,
+        COM_UDPC
+    } com_uart_udp_type;
+    std::string com_uart_path;
+    int com_udpls_port;
+    int com_udprs_port;
+    std::string com_udprs_addr;
+
+    struct sockaddr_in udp_addr;
+    socklen_t udp_len;
 
     std::string ipc1_path;
     std::string ipc2_path;
     std::string imu_topic;
+
+    bool debug_enable;
 };

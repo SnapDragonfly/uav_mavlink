@@ -1,14 +1,17 @@
 # config.yaml for uav_mavlink
 
-mavlink_activate: "udp"  # "uart" or "udp"
+mavlink_activate: "udpc"  # "uart", "udpc", "udps"
 mavlink_rate: 200     # 200Hz
 
 # Drone communication:
 uav_com:
   - type: "uart"
     path: "/dev/ttyUSB0"
-  - type: "udp"
+  - type: "udps"
+    port: 14560
+  - type: "udpc"
     port: 14550
+    addr: "192.168.1.15"
 
 # IPC settings:
 ipcs:
@@ -19,3 +22,5 @@ ipcs:
 
 # ROS topic
 uav_imu: "/tmp/uav_imu"
+
+debug: false

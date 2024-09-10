@@ -23,6 +23,11 @@ int main(int argc, char *argv[]) {
             ROS_ERROR("%s loop error(%d)", PACKAGE_NAME, ret);
             return ret;
         }
+
+        if (mavlink_bridge.mvalink_debug()){
+            ROS_INFO("%s: loop ret=%d", PACKAGE_NAME, ret);
+        }
+        
     }
 
     ret = mavlink_bridge.mavlink_exit();

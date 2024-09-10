@@ -29,50 +29,66 @@
 #include "bridge.h"
 
 
-#define TAG_TYPE_IPC  "ipcs"
-#define TAG_TYPE_IPC1 "ipc1"
-#define TAG_TYPE_IPC2 "ipc2"
-#define TAG_TYPE_UART "uart"
-#define TAG_TYPE_UDP  "udp"
+#define TAG_TYPE_IPC     "ipcs"
+#define TAG_TYPE_IPC1    "ipc1"
+#define TAG_TYPE_IPC2    "ipc2"
+#define TAG_TYPE_UART    "uart"
+#define TAG_TYPE_UDP     "udp"
 
-#define TAG_TYPE "type"
-#define TAG_PATH "path"
-#define TAG_PORT "port"
-#define TAG_UART "uart"
-#define TAG_UDP  "udp"
+#define TAG_TYPE         "type"
+#define TAG_PATH         "path"
+#define TAG_PORT         "port"
+#define TAG_UART         "uart"
+#define TAG_UDPS         "udps"
+#define TAG_UDPC         "udpc"
+#define TAG_ADDR         "addr"
 
 #define TAG_UAV_COM      "uav_com"
 #define TAG_UAV_IMU      "uav_imu"
 #define TAG_UAV_ACTIVATE "mavlink_activate"
 #define TAG_UAV_RATE     "mavlink_rate"
+#define TAG_UAV_DEBUG    "debug"
+
+#define TAG_COM_ACTIVE   "(active)"
+
+#define IS_ACTIVE(A, B)  ((A == B)?TAG_COM_ACTIVE:"")
 
 void MavlinkHandler::config_print(std::string title){
-    ROS_INFO("title: %s ------------->", title.c_str());
-    ROS_INFO("uav acti: %s", mavlink_activate.c_str());
+    ROS_INFO("%s ------------->", title.c_str());
+
+    ROS_INFO("uav active: %s", mavlink_activate.c_str());
     ROS_INFO("uav rate: %d", mavlink_rate);
-    if (TAG_UART == mavlink_activate){
-        ROS_INFO("uart: %s", com_path.c_str());
-    } else {
-       ROS_INFO(" udp: %d", com_port);
-    }
+
+    ROS_INFO("uart%s: %s", IS_ACTIVE(COM_UART, com_uart_udp_type), com_uart_path.c_str());
+    ROS_INFO("udpls%s: %s", IS_ACTIVE(COM_UDPS, com_uart_udp_type), "127.0.0.1");
+    ROS_INFO("udpls%s: %d", IS_ACTIVE(COM_UDPS, com_uart_udp_type), com_udpls_port);
+    ROS_INFO("udprs%s: %s", IS_ACTIVE(COM_UDPC, com_uart_udp_type), com_udprs_addr.c_str());
+    ROS_INFO("udprs%s: %d", IS_ACTIVE(COM_UDPC, com_uart_udp_type), com_udprs_port);
     
     ROS_INFO("ipc1: %s", ipc1_path.c_str());
     ROS_INFO("ipc2: %s", ipc2_path.c_str());
     ROS_INFO(" imu: %s", imu_topic.c_str());
-    ROS_INFO("title: %s <-------------", title.c_str());
+
+    ROS_INFO("debug: %s", debug_enable?"true":"false");
+
+    ROS_INFO("%s <-------------", title.c_str());
 }
 
 int MavlinkHandler::config_read(){
     try {
         // Default settings:
-        mavlink_activate = TAG_UART;
-        uart_enable      = true;
-        mavlink_rate     = MAVLINK_DEFAULT_RATE;
-        com_path         = MAVLINK_DEFAULT_UART_PATH;
-        com_port         = MAVLINK_DEFAULT_UDP_PORT;
-        ipc1_path        = MAVLINK_DEFAULT_IPC_PATH1;
-        ipc2_path        = MAVLINK_DEFAULT_IPC_PATH2;
-        imu_topic        = MAVLINK_DEFAULT_IMU_TOPIC;
+        mavlink_activate  = TAG_UART;
+        com_uart_udp_type = COM_UART;
+        mavlink_rate      = MAVLINK_DEFAULT_RATE;
+        com_uart_path     = MAVLINK_DEFAULT_UART_PATH;
+        com_udpls_port    = MAVLINK_DEFAULT_UDPS_PORT;
+        com_udprs_addr    = MAVLINK_DEFAULT_UDPC_ADDR;
+        com_udprs_port    = MAVLINK_DEFAULT_UDPC_PORT;
+        ipc1_path         = MAVLINK_DEFAULT_IPC_PATH1;
+        ipc2_path         = MAVLINK_DEFAULT_IPC_PATH2;
+        imu_topic         = MAVLINK_DEFAULT_IMU_TOPIC;
+
+        debug_enable      = true;
 
         //config_print("before");
 
@@ -89,6 +105,13 @@ int MavlinkHandler::config_read(){
 
         // Access values from the YAML file
         mavlink_activate = config[TAG_UAV_ACTIVATE].as<std::string>();
+        if (TAG_UART == mavlink_activate) {
+            com_uart_udp_type = COM_UART;
+        } else if(TAG_UDPS == mavlink_activate) {
+            com_uart_udp_type = COM_UDPS;
+        } else {
+            com_uart_udp_type = COM_UDPC;
+        }
         mavlink_rate = config[TAG_UAV_RATE].as<int>();
         imu_topic = config[TAG_UAV_IMU].as<std::string>();
         
@@ -101,12 +124,14 @@ int MavlinkHandler::config_read(){
         for (std::size_t i = 0; i < uav_com.size(); i++) {
             std::string com_type = uav_com[i][TAG_TYPE].as<std::string>();
             if (com_type == TAG_UART) {
-                com_path = uav_com[i][TAG_PATH].as<std::string>();
-                uart_enable = true;
+                com_uart_path = uav_com[i][TAG_PATH].as<std::string>();
                 //ROS_INFO("%s: %s", TAG_UART, com_path.c_str());
-            } else if (com_type == TAG_UDP) {
-                com_port = uav_com[i][TAG_PORT].as<int>();
-                uart_enable = false;
+            } else if (com_type == TAG_UDPS) {
+                com_udpls_port = uav_com[i][TAG_PORT].as<int>();
+                //ROS_INFO("%s: %d", TAG_UDP, com_port);
+            } else if (com_type == TAG_UDPC) {
+                com_udprs_port = uav_com[i][TAG_PORT].as<int>();
+                com_udprs_addr = uav_com[i][TAG_ADDR].as<std::string>();
                 //ROS_INFO("%s: %d", TAG_UDP, com_port);
             }
         }
@@ -123,6 +148,8 @@ int MavlinkHandler::config_read(){
                 //ROS_INFO("%s: %s", TAG_TYPE_IPC2, ipc2_path.c_str());
             }
         }
+
+        debug_enable = config[TAG_UAV_DEBUG].as<bool>();
     }
     catch (const std::runtime_error& e) {
         ROS_ERROR("Runtime error: %s", e.what());
@@ -145,9 +172,9 @@ int MavlinkHandler::uart_create(){
     /*
      * UART initialization from FC
      */
-    uart_fd = open(com_path.c_str(), O_RDWR);
+    uart_fd = open(com_uart_path.c_str(), O_RDWR);
     if (uart_fd < 0) {
-        ROS_ERROR("Can not open serial port %s.", com_path.c_str());
+        ROS_ERROR("Can not open serial port %s.", com_uart_path.c_str());
         return 1;
     }
 
@@ -194,12 +221,12 @@ int MavlinkHandler::udps_create(){
     }
 
     memset(&server_addr, 0, sizeof(server_addr));
-    memset(&com_client_addr, 0, sizeof(com_client_addr));
+    memset(&udp_addr, 0, sizeof(udp_addr));
 
     // Server information
     server_addr.sin_family = AF_INET;  // IPv4
     server_addr.sin_addr.s_addr = INADDR_ANY;  // Local IP
-    server_addr.sin_port = htons(com_port);  // Port
+    server_addr.sin_port = htons(com_udpls_port);  // Port
 
     // Bind the socket
     if (bind(udp_fd, (const struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
@@ -207,6 +234,36 @@ int MavlinkHandler::udps_create(){
         close(udp_fd);
         return 5;
     }
+
+    ROS_INFO("udps_create ip: %s, port:%d", "127.0.0.1", com_udpls_port);
+
+    return 0;
+}
+
+int MavlinkHandler::udpc_create(){
+
+    // Create a UDP socket
+    udp_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (udp_fd < 0) {
+        ROS_ERROR("Create socket failed.");
+        return 4;
+    }
+
+    memset(&udp_addr, 0, sizeof(udp_addr));
+
+    // Server information
+    udp_addr.sin_family = AF_INET;  // IPv4
+    //udp_addr.sin_addr.s_addr = inet_addr(com_udprs_addr.c_str());  // remote IP
+    if (inet_pton(AF_INET, com_udprs_addr.c_str(), &udp_addr.sin_addr) <= 0) {
+        ROS_ERROR("Invalid address/ Address not supported");
+        return 5;
+    }
+    udp_addr.sin_port = htons(com_udprs_port);  // Port
+
+    const char *message = "Hello, Server!"; // just for link establish
+    (void)sendto(udp_fd, message, strlen(message), 0, (struct sockaddr *) &udp_addr, sizeof(udp_addr));
+
+    ROS_INFO("udpc_create ip: %s, port:%d", com_udprs_addr.c_str(), com_udprs_port);
 
     return 0;
 }
@@ -267,35 +324,39 @@ int MavlinkHandler::mavlink_init(ros::NodeHandle &ros_nh){
 
     imu_pub = ros_nh.advertise<sensor_msgs::Imu>(imu_topic.c_str(), 100);
 
-    if (uart_enable){
-        ret = uart_create();
-    } else {
-        ret = udps_create();
-    }
-    
+    switch(com_uart_udp_type){          
+        case COM_UDPS:
+            ret = udps_create();
+            pfds[0].fd= udp_fd;
+            break;
+
+        case COM_UDPC:
+            ret = udpc_create();
+            pfds[0].fd= udp_fd;
+            break;
+
+        case COM_UART:
+        default:
+            ret = uart_create();
+            pfds[0].fd= uart_fd;
+            break;
+    }   
     if(0 != ret){
         return ret;
     }
+    pfds[0].events = POLLIN;
+
     ret = ipc1_create();
     if(0 != ret){
         return ret;
     }
+    pfds[1].fd= ipc_fd;
+    pfds[1].events = POLLIN;
+
     ret = ipc2_create();
     if(0 != ret){
         return ret;
     }
-    /*
-     * Polling array preparation
-     */
-    if (uart_enable) {
-        pfds[0].fd= uart_fd;
-    } else {
-        pfds[0].fd= udp_fd;
-    }
-    pfds[0].events = POLLIN;
-
-    pfds[1].fd= ipc_fd;
-    pfds[1].events = POLLIN;
     pfds[2].fd= ipc_fd2;
     pfds[2].events = POLLIN;
 
@@ -306,6 +367,8 @@ int MavlinkHandler::mavlink_handler(unsigned char *buf, int len){
     struct timeval tv;
     mavlink_status_t status;
     mavlink_message_t msg;
+
+    //ROS_INFO("recv msg buf len %d\n", len);
     
    for (int i = 0; i < len; i++) {
         if (mavlink_parse_char(0, buf[i], &msg, &status)) {
@@ -431,16 +494,33 @@ int MavlinkHandler::udps_poll(){
         return 1;
     }
 
-    com_client_len = sizeof(com_client_addr);
-    int len = recvfrom(udp_fd, buf, MAVLINK_DEFAULT_BUF_LEN, 0, (struct sockaddr *)&com_client_addr, &com_client_len);
+    udp_len = sizeof(udp_addr);
+    int len = recvfrom(udp_fd, buf, MAVLINK_DEFAULT_BUF_LEN, 0, (struct sockaddr *)&udp_addr, &udp_len);
+    return mavlink_handler(buf, len);
+}
+
+int MavlinkHandler::udpc_poll(){
+
+    if (!(pfds[0].revents & POLLIN)) {
+        return 1;
+    }
+
+    udp_len = sizeof(udp_addr);
+    int len = recvfrom(udp_fd, buf, MAVLINK_DEFAULT_BUF_LEN, 0, (struct sockaddr *) &udp_addr, &udp_len);
     return mavlink_handler(buf, len);
 }
 
 void MavlinkHandler::cc_send(unsigned char *buf, int len){
-    if(uart_enable) {
-        write(uart_fd, buf, len);
-    } else {
-        sendto(udp_fd, buf, len, 0, (struct sockaddr *)&com_client_addr, com_client_len);
+    switch (com_uart_udp_type) {
+        case COM_UDPS:
+        case COM_UDPC:
+            sendto(udp_fd, buf, len, 0, (struct sockaddr *)&udp_addr, udp_len);
+            break;
+
+        case COM_UART:
+        default:
+            write(uart_fd, buf, len);
+            break;
     }
 }
 
@@ -533,12 +613,25 @@ int MavlinkHandler::mavlink_poll(){
      * Polling on fds for events or messages.
      */
     int ret = poll(pfds, MAVLINK_DEFAULT_NUM_PFDS, 5000);
-
     if (ret > 0) {
-        if(uart_enable){
-            uart_poll();
-        } else {
-            udps_poll();
+        switch(com_uart_udp_type){          
+            case COM_UART:
+                uart_poll();
+                break;
+
+            case COM_UDPS:
+                udps_poll();
+                break;
+
+            case COM_UDPC:
+                udpc_poll();
+                break;
+
+            default:
+                ROS_ERROR("%s: mavlink_poll error(%d)", PACKAGE_NAME, ret);
+                mavlink_exit();
+                exit(1);
+                break;
         }
         
         ipc1_poll();
@@ -548,13 +641,22 @@ int MavlinkHandler::mavlink_poll(){
 }
 
 int MavlinkHandler::mavlink_exit(){
-    if (uart_enable) {
-        close(uart_fd);
-    } else {
-        close(udp_fd);
+    switch(com_uart_udp_type){          
+        case COM_UART:
+            close(uart_fd);
+            break;
+
+        case COM_UDPS:
+        case COM_UDPC:
+        default:
+            close(udp_fd);
+            break;
     }
     close(ipc_fd);
     close(ipc_fd2);
     return 0;
 }
 
+bool MavlinkHandler::mvalink_debug(){
+    return debug_enable;
+}

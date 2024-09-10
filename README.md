@@ -1,82 +1,31 @@
-# uav_mavlink
+# uav mavlink
 
-uav_mavlink is used for bridging the message between ardupilot and VINS-Mono/ego-Planner.
+- [How to build?](doc/how_to_build.md)
+- [How to configure?](doc/how_to_config.md)
+- [How to run the program?](doc/how_to_run.md)
+- [Hardware diagram for uav mavlink](doc/hardware_diagram.md)
 
-- hardware diagram
-```
-imx415 --CSI--> ssc338q(OpenIPC) <--USB--> rtl8812au
-                       ^                       ^
-                       |                       |
-                      UART                    WiFi
-                       |                       |
-                       v                       v
-                H743 FC(Ardupilot)   JetsonOrin(VINS Mono+ego Planner)
-```
+# Design Goal
 
-or
+uav_mavlink is used for bridging the messages between ardupilot and VINS-Mono/VINS-Fusion/ego-Planner.
+
+# Software Diagram
 
 ```
-imx415 --CSI--> ssc338q(OpenIPC) <--USB--> rtl8812au
-                       ^                       ^
-                       |                       |
-                      UART                    WiFi
-                       |                       |
-                       v                       v
-             H743 FC(Ardupilot) <--UART-->  JetsonOrin(VINS Mono+ego Planner)
+Ardupilot  <--UART/UDP --> uav_mavlink <--> ego Planner
+                                ^
+                                |
+                                v
+                         VINS Mono/Fusion
 ```
 
-- software diagram
-```
-H743 FC(Ardupilot)  <--UART/WiFi-- uav_mavlink --> ego Planner
-                                        ^
-                                        |
-                                        v
-                                    VINS Mono
-```
+# Features
 
-*Note: Diagram is from [Ardupilot FollowMe Test Platform Build](https://blog.csdn.net/lida2003/article/details/141649074).*
-
-# How to build?
-
-Upgrade and install dev libraries.
-
-```
-$ sudo apt-get update
-$ sudo apt-get upgrade
-$ sudo apt-get install libyaml-cpp-dev
-$ sudo apt-get install libeigen3-dev
-```
-
-clone repo and build app.
-
-```
-$ mkdir -p ~/catkin_ws/src
-$ cd ~/catkin_ws/src
-$ git clone https://github.com/SnapDragonfly/uav_mavlink.git
-$ cd ../
-$ catkin_make --pkg uav_mavlink
-```
-
-# How to configure?
-
-TBD.
+1. Support UART connection with Ardupilot
+2. Support UDP Client connection with Ardupilot
+3. Support UDP Server connection from Ardupilot
+4. IPC1???
+5. IPC2???
 
 
-# How to run the program?
-
-Open a terminal and run roscore.
-
-```
-$ cd ~/catkin_ws
-$ source devel/setup.bash
-$ roscore
-```
-
-Open another terminal and run uav_mavlink app.
-
-```
-$ cd ~/catkin_ws
-$ source devel/setup.bash
-$ rosrun uav_mavlink uav_mavlink
-```
 

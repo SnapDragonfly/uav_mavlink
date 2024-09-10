@@ -183,7 +183,7 @@ int MavlinkHandler::uart_create(){
     return 0;
 }
 
-int MavlinkHandler::udp_create(){
+int MavlinkHandler::udps_create(){
     struct sockaddr_in server_addr;
 
     // Create a UDP socket
@@ -270,7 +270,7 @@ int MavlinkHandler::mavlink_init(ros::NodeHandle &ros_nh){
     if (uart_enable){
         ret = uart_create();
     } else {
-        ret = udp_create();
+        ret = udps_create();
     }
     
     if(0 != ret){
@@ -425,7 +425,7 @@ int MavlinkHandler::uart_poll(){
     return mavlink_handler(buf, len);
 }
 
-int MavlinkHandler::udp_poll(){
+int MavlinkHandler::udps_poll(){
 
     if (!(pfds[0].revents & POLLIN)) {
         return 1;
@@ -538,7 +538,7 @@ int MavlinkHandler::mavlink_poll(){
         if(uart_enable){
             uart_poll();
         } else {
-            udp_poll();
+            udps_poll();
         }
         
         ipc1_poll();

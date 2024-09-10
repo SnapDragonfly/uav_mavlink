@@ -22,12 +22,12 @@ public:
 private:
     // Private methods
     int uart_create();
-    int udp_create();
+    int udps_create();
     int ipc1_create();
     int ipc2_create();
 
     int uart_poll();
-    int udp_poll();
+    int udps_poll();
     int mavlink_handler(unsigned char *buf, int len);
     void cc_send(unsigned char *buf, int len);
 

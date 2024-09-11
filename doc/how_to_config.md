@@ -1,1 +1,40 @@
-TBD.
+# How to configure?
+
+# Section 1: rates for polling HIGHRES_IMU and ATTITUDE_QUATERNION
+
+> \# Recommended for VINS Mono, 100Hz
+> mavlink_rate: 50
+
+# Section 2: link between ardupilot and uav_mavlink
+> \# "uart" --> UART
+> \# "udpc" --> UDP Client
+> \# "udps" --> UDP Server
+> mavlink_activate: "udpc"
+
+# Section 3: drone links
+> \# Currently, there is only one link, dual link might be considered for backup.
+> \# Please check above activated link.
+> uav_com:
+>   - type: "uart"
+>     path: "/dev/ttyUSB0"
+>     baud: 921600
+>   - type: "udps"
+>     port: 14560
+>   - type: "udpc"
+>     port: 14550
+>     addr: "192.168.1.15"
+
+# Section 4: IPC links between VINS Mono/Fusion, ego-planner and uav_mavlink
+> \# "ipc1" --> for att_pos_mocap/vision_speed_estimate 
+> \# "ipc2" --> for MAV_FRAME_BODY_OFFSET_NED commands
+> ipcs:
+>   - type: "ipc1"
+>     path: "/tmp/uav_server"
+>   - type: "ipc2"
+>     path: "/tmp/uav_server2"
+
+# Section 5: ROS topic for IMU data
+> uav_imu: "/tmp/uav_imu"
+
+# Section 6: debug
+> debug: false

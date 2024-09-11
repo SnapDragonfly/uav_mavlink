@@ -13,5 +13,5 @@ Open another terminal and run uav_mavlink app.
 ```
 $ cd ~/catkin_ws
 $ source devel/setup.bash
-$ rosrun uav_mavlink uav_mavlink
+$ rosrun uav_mavlink uav_mavlink_node
 ```

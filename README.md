@@ -8,6 +8,9 @@
 # Design Goal
 
 uav_mavlink is used for bridging the messages between ardupilot and VINS-Mono/VINS-Fusion/ego-Planner.
+And it oriented to simplify configuration and handles different kind of interfaces.
+
+*The original code comes from: https://github.com/chobitsfan/mavlink-udp-proxy*
 
 # Software Diagram
 

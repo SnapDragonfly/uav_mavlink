@@ -26,7 +26,9 @@ public:
     bool mvalink_debug();
 
 private:
-    // Private methods
+    /*
+     * Private methods
+     */ 
     int uart_create();
     int udps_create();
     int udpc_create();
@@ -43,14 +45,22 @@ private:
     int ipc2_poll();
 
     int config_read();
-
     void config_print(std::string title);
 
-    // Member variables
+    /*
+     * Member variables for bridge
+     */ 
     struct pollfd pfds[MAVLINK_DEFAULT_NUM_PFDS];
+    int uart_fd, udp_fd, ipc_fd, ipc_fd2;
     unsigned char buf[MAVLINK_DEFAULT_BUF_LEN];
 
-    int uart_fd, udp_fd, ipc_fd, ipc_fd2;
+    struct sockaddr_in udp_addr;
+    socklen_t udp_len;
+
+    /*
+     * Member variables for mavlink
+     */
+    float update_interval;
     ros::Publisher imu_pub;
 
     uint8_t mav_sysid;
@@ -64,24 +74,24 @@ private:
     uint64_t last_us;
 
     float latest_alt, gnd_alt, latest_x, start_x;
-    float update_interval;
 
-    std::string mavlink_activate;
+    /*
+     * Member variables for configuration
+     */
     float mavlink_rate;
 
+    std::string mavlink_activate;
     enum ComType {
         COM_UART,
         COM_UDPS,
         COM_UDPC
     } com_uart_udp_type;
+
     std::string com_uart_path;
     int com_uart_baud;
     int com_udpls_port;
     int com_udprs_port;
     std::string com_udprs_addr;
-
-    struct sockaddr_in udp_addr;
-    socklen_t udp_len;
 
     std::string ipc1_path;
     std::string ipc2_path;

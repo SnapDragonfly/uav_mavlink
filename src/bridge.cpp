@@ -51,14 +51,15 @@
 #define TAG_UAV_DEBUG    "debug"
 
 #define TAG_COM_ACTIVE   "(active)"
-
 #define IS_ACTIVE(A, B)  ((A == B)?TAG_COM_ACTIVE:"")
+
+#define BOOL_STATUS(A)  ((A == true)?"true":"false")
 
 void MavlinkHandler::config_print(std::string title){
     ROS_INFO("%s ------------->", title.c_str());
 
     ROS_INFO("uav active: %s", mavlink_activate.c_str());
-    ROS_INFO("uav rate: %dHz, %.0fus", mavlink_rate, update_interval);
+    ROS_INFO("uav rate: %.2fHz, %.0fus", mavlink_rate, update_interval);
 
     ROS_INFO("uart%s: %s", IS_ACTIVE(COM_UART, com_uart_udp_type), com_uart_path.c_str());
     ROS_INFO("udpls%s: %s", IS_ACTIVE(COM_UDPS, com_uart_udp_type), "127.0.0.1");
@@ -77,22 +78,7 @@ void MavlinkHandler::config_print(std::string title){
 
 int MavlinkHandler::config_read(){
     try {
-        // Default settings:
-        mavlink_activate  = TAG_UART;
-        com_uart_udp_type = COM_UART;
-        mavlink_rate      = MAVLINK_DEFAULT_RATE;
-        update_interval   = RATIO_SECOND_TO_MICRO_SECOND/mavlink_rate;
-        com_uart_path     = MAVLINK_DEFAULT_UART_PATH;
-        com_udpls_port    = MAVLINK_DEFAULT_UDPS_PORT;
-        com_udprs_addr    = MAVLINK_DEFAULT_UDPC_ADDR;
-        com_udprs_port    = MAVLINK_DEFAULT_UDPC_PORT;
-        ipc1_path         = MAVLINK_DEFAULT_IPC_PATH1;
-        ipc2_path         = MAVLINK_DEFAULT_IPC_PATH2;
-        imu_topic         = MAVLINK_DEFAULT_IMU_TOPIC;
-
-        debug_enable      = true;
-
-        //config_print("before");
+        //config_print("debug");
 
         // Get the current working directory
         std::filesystem::path work_path = std::filesystem::current_path();
@@ -114,7 +100,7 @@ int MavlinkHandler::config_read(){
         } else {
             com_uart_udp_type = COM_UDPC;
         }
-        mavlink_rate = config[TAG_UAV_RATE].as<int>();
+        mavlink_rate = config[TAG_UAV_RATE].as<float>();
         update_interval = RATIO_SECOND_TO_MICRO_SECOND/mavlink_rate;
         imu_topic = config[TAG_UAV_IMU].as<std::string>();
         
@@ -381,11 +367,13 @@ int MavlinkHandler::mavlink_handler(unsigned char *buf, int len){
         if (msg.msgid == MAVLINK_MSG_ID_HEARTBEAT) {
             mavlink_heartbeat_t hb;
             mavlink_msg_heartbeat_decode(&msg, &hb);
+
             if (msg.sysid != mav_sysid) {
                 mav_sysid = msg.sysid;
                 ROS_INFO("found MAV %d", msg.sysid);
             }
-            if (time_offset_us == 0) {
+
+            if (0 == time_offset_us) {
                 gettimeofday(&tv, NULL);
                 mavlink_msg_timesync_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, 0, tv.tv_sec*1000000+tv.tv_usec, mav_sysid, 1); //fill timesync with us instead of ns
                 len = mavlink_msg_to_send_buffer(buf, &msg);
@@ -398,17 +386,24 @@ int MavlinkHandler::mavlink_handler(unsigned char *buf, int len){
                 mavlink_msg_set_gps_global_origin_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, mav_sysid, 247749434, 1210443077, 100000, tv.tv_sec*1000000+tv.tv_usec);
                 len = mavlink_msg_to_send_buffer(buf, &msg);
                 cc_send(buf, len);
+
+                ROS_INFO("sync time_offset_us = 0");
             }
+
             if (no_hr_imu) {
                 mavlink_msg_command_long_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, 0, 0, MAV_CMD_SET_MESSAGE_INTERVAL, 0, MAVLINK_MSG_ID_HIGHRES_IMU, update_interval, 0, 0, 0, 0, 0);
                 len = mavlink_msg_to_send_buffer(buf, &msg);
                 cc_send(buf, len);
+                ROS_INFO("HIGHRES_IMU set interval %0.2fus", update_interval);
             }
+
             if (no_att_q) {
                 mavlink_msg_command_long_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, 0, 0, MAV_CMD_SET_MESSAGE_INTERVAL, 0, MAVLINK_MSG_ID_ATTITUDE_QUATERNION, update_interval, 0, 0, 0, 0, 0);
                 len = mavlink_msg_to_send_buffer(buf, &msg);
                 cc_send(buf, len);
+                ROS_INFO("ATTITUDE_QUATERNION set interval %0.2fus", update_interval);
             }
+
             if (hb.custom_mode == COPTER_MODE_GUIDED) {
                 if (demo_stage == 0) {
                     demo_stage = 1;
@@ -420,6 +415,7 @@ int MavlinkHandler::mavlink_handler(unsigned char *buf, int len){
             } else {
                 demo_stage = 0;
             }
+
             if (hb.base_mode & 128) {
                 if (gnd_alt == 0) {
                     gnd_alt = latest_alt;
@@ -434,17 +430,34 @@ int MavlinkHandler::mavlink_handler(unsigned char *buf, int len){
             mavlink_msg_timesync_decode(&msg, &ts);
             if (ts.tc1 != 0) {
                 time_offset_us = ts.ts1 - ts.tc1;
-                ROS_INFO("time offset %ld", time_offset_us);
+                ROS_INFO("sync time_offset_us=%ld", time_offset_us);
             }
         } else if (msg.msgid == MAVLINK_MSG_ID_STATUSTEXT) {
             mavlink_statustext_t txt;
             mavlink_msg_statustext_decode(&msg, &txt);
             ROS_INFO("fc: %s", txt.text);
         } else if (msg.msgid == MAVLINK_MSG_ID_HIGHRES_IMU) {
-            no_hr_imu = false;
             mavlink_highres_imu_t hr_imu;
             mavlink_msg_highres_imu_decode(&msg, &hr_imu); // time_usec is time since boot
             if (time_offset_us > 0 && hr_imu.time_usec > last_us) {
+#if 1
+                static int64_t effective_counts = 0;
+                static int64_t effective_offset_us = 0;
+                effective_counts++;
+                if (0 == (effective_counts % int64_t(mavlink_rate))){
+                    int64_t effective_rate = RATIO_SECOND_TO_MICRO_SECOND/(hr_imu.time_usec - last_us);
+                    ROS_INFO("MAVLINK_MSG_ID_HIGHRES_IMU frequency = %ldHz, should be %0.2fHz", 
+                              effective_rate, 
+                              mavlink_rate);
+                    effective_offset_us = 0;
+
+                    if (effective_rate >= 0.9*mavlink_rate && effective_rate <= 1.1*mavlink_rate){
+                        no_hr_imu = false;
+                        no_att_q = false;
+                    }
+                }
+#endif
+
                 last_us = hr_imu.time_usec;
                 sensor_msgs::Imu imu_msg;
 #if 0
@@ -468,7 +481,6 @@ int MavlinkHandler::mavlink_handler(unsigned char *buf, int len){
                 imu_pub.publish(imu_msg);
             }
         } else if (msg.msgid == MAVLINK_MSG_ID_ATTITUDE_QUATERNION) {
-            no_att_q = false;
             mavlink_attitude_quaternion_t att_q;
             mavlink_msg_attitude_quaternion_decode(&msg, &att_q);
             att_q_w = att_q.q1;
@@ -663,3 +675,42 @@ int MavlinkHandler::mavlink_exit(){
 bool MavlinkHandler::mvalink_debug(){
     return debug_enable;
 }
+
+MavlinkHandler::MavlinkHandler(){
+    // Default values:
+    mav_sysid      = 0;
+    demo_stage     = 0;
+
+    no_hr_imu      = true;
+    no_att_q       = true;
+
+    att_q_x        = 0;
+    att_q_y        = 0;
+    att_q_z        = 0;
+    att_q_w        = 0;
+
+    time_offset_us = 0;
+    last_us        = 0;
+
+    latest_alt     = 0;
+    gnd_alt        = 0;
+    latest_x       = 0;
+    start_x        = 0;
+
+    update_interval = 0;
+
+    // Default settings:
+    mavlink_activate  = TAG_UART;
+    com_uart_udp_type = COM_UART;
+    mavlink_rate      = MAVLINK_DEFAULT_RATE;
+    update_interval   = RATIO_SECOND_TO_MICRO_SECOND/mavlink_rate;
+    com_uart_path     = MAVLINK_DEFAULT_UART_PATH;
+    com_udpls_port    = MAVLINK_DEFAULT_UDPS_PORT;
+    com_udprs_addr    = MAVLINK_DEFAULT_UDPC_ADDR;
+    com_udprs_port    = MAVLINK_DEFAULT_UDPC_PORT;
+    ipc1_path         = MAVLINK_DEFAULT_IPC_PATH1;
+    ipc2_path         = MAVLINK_DEFAULT_IPC_PATH2;
+    imu_topic         = MAVLINK_DEFAULT_IMU_TOPIC;
+
+    debug_enable      = true;
+};

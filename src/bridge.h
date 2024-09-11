@@ -11,7 +11,7 @@
 class MavlinkHandler {
 public:
     // Constructor and Destructor
-    MavlinkHandler(){};
+    MavlinkHandler();
     ~MavlinkHandler(){};
 
     // Public methods
@@ -49,18 +49,21 @@ private:
     int uart_fd, udp_fd, ipc_fd, ipc_fd2;
     ros::Publisher imu_pub;
 
-    uint8_t mav_sysid = 0;
-    int demo_stage = 0;
-    bool no_hr_imu = true;
-    bool no_att_q = true;
-    float att_q_x =0, att_q_y = 0, att_q_z = 0, att_q_w = 0;
-    int64_t time_offset_us = 0;
-    uint64_t last_us = 0;
-    float latest_alt = 0, gnd_alt = 0, latest_x = 0, start_x = 0;
-    float update_interval = 0;
+    uint8_t mav_sysid;
+    int demo_stage;
+
+    bool no_hr_imu, no_att_q;
+
+    float att_q_x, att_q_y, att_q_z, att_q_w;
+
+    int64_t time_offset_us;
+    uint64_t last_us;
+
+    float latest_alt, gnd_alt, latest_x, start_x;
+    float update_interval;
 
     std::string mavlink_activate;
-    int mavlink_rate;
+    float mavlink_rate;
 
     enum ComType {
         COM_UART,

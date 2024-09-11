@@ -57,6 +57,7 @@ private:
     int64_t time_offset_us = 0;
     uint64_t last_us = 0;
     float latest_alt = 0, gnd_alt = 0, latest_x = 0, start_x = 0;
+    float update_interval = 0;
 
     std::string mavlink_activate;
     int mavlink_rate;

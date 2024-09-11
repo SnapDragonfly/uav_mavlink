@@ -28,6 +28,7 @@
 
 #include "bridge.h"
 
+#define RATIO_SECOND_TO_MICRO_SECOND   1000000
 
 #define TAG_TYPE_IPC     "ipcs"
 #define TAG_TYPE_IPC1    "ipc1"
@@ -57,7 +58,7 @@ void MavlinkHandler::config_print(std::string title){
     ROS_INFO("%s ------------->", title.c_str());
 
     ROS_INFO("uav active: %s", mavlink_activate.c_str());
-    ROS_INFO("uav rate: %d", mavlink_rate);
+    ROS_INFO("uav rate: %dHz, %.0fus", mavlink_rate, update_interval);
 
     ROS_INFO("uart%s: %s", IS_ACTIVE(COM_UART, com_uart_udp_type), com_uart_path.c_str());
     ROS_INFO("udpls%s: %s", IS_ACTIVE(COM_UDPS, com_uart_udp_type), "127.0.0.1");
@@ -80,6 +81,7 @@ int MavlinkHandler::config_read(){
         mavlink_activate  = TAG_UART;
         com_uart_udp_type = COM_UART;
         mavlink_rate      = MAVLINK_DEFAULT_RATE;
+        update_interval   = RATIO_SECOND_TO_MICRO_SECOND/mavlink_rate;
         com_uart_path     = MAVLINK_DEFAULT_UART_PATH;
         com_udpls_port    = MAVLINK_DEFAULT_UDPS_PORT;
         com_udprs_addr    = MAVLINK_DEFAULT_UDPC_ADDR;
@@ -113,6 +115,7 @@ int MavlinkHandler::config_read(){
             com_uart_udp_type = COM_UDPC;
         }
         mavlink_rate = config[TAG_UAV_RATE].as<int>();
+        update_interval = RATIO_SECOND_TO_MICRO_SECOND/mavlink_rate;
         imu_topic = config[TAG_UAV_IMU].as<std::string>();
         
         //ROS_INFO("%s: %s", TAG_UAV_ACTIVATE, mavlink_activate.c_str());
@@ -373,7 +376,7 @@ int MavlinkHandler::mavlink_handler(unsigned char *buf, int len){
    for (int i = 0; i < len; i++) {
         if (!mavlink_parse_char(0, buf[i], &msg, &status)) continue;
         if (msg.sysid == 255) continue;
-        
+
         //ROS_INFO("recv msg ID %d, seq %d\n", msg.msgid, msg.seq);
         if (msg.msgid == MAVLINK_MSG_ID_HEARTBEAT) {
             mavlink_heartbeat_t hb;
@@ -397,12 +400,12 @@ int MavlinkHandler::mavlink_handler(unsigned char *buf, int len){
                 cc_send(buf, len);
             }
             if (no_hr_imu) {
-                mavlink_msg_command_long_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, 0, 0, MAV_CMD_SET_MESSAGE_INTERVAL, 0, MAVLINK_MSG_ID_HIGHRES_IMU, 10000, 0, 0, 0, 0, 0);
+                mavlink_msg_command_long_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, 0, 0, MAV_CMD_SET_MESSAGE_INTERVAL, 0, MAVLINK_MSG_ID_HIGHRES_IMU, update_interval, 0, 0, 0, 0, 0);
                 len = mavlink_msg_to_send_buffer(buf, &msg);
                 cc_send(buf, len);
             }
             if (no_att_q) {
-                mavlink_msg_command_long_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, 0, 0, MAV_CMD_SET_MESSAGE_INTERVAL, 0, MAVLINK_MSG_ID_ATTITUDE_QUATERNION, 10000, 0, 0, 0, 0, 0);
+                mavlink_msg_command_long_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, 0, 0, MAV_CMD_SET_MESSAGE_INTERVAL, 0, MAVLINK_MSG_ID_ATTITUDE_QUATERNION, update_interval, 0, 0, 0, 0, 0);
                 len = mavlink_msg_to_send_buffer(buf, &msg);
                 cc_send(buf, len);
             }

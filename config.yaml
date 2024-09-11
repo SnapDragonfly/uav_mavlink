@@ -1,12 +1,15 @@
 # config.yaml for uav_mavlink
 
-mavlink_activate: "udpc"  # "uart", "udpc", "udps"
-mavlink_rate: 200     # 200Hz
+# "uart", "udpc", "udps"
+mavlink_activate: "udpc"
+# 100Hz
+mavlink_rate: 50
 
 # Drone communication:
 uav_com:
   - type: "uart"
     path: "/dev/ttyUSB0"
+    baud: 921600
   - type: "udps"
     port: 14560
   - type: "udpc"

@@ -1,10 +1,14 @@
 
-
 #include <ros/ros.h>
 #include <sensor_msgs/Imu.h>
 
 #include <poll.h>
 #include <netinet/in.h>
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Waddress-of-packed-member"
+#include "ardupilotmega/mavlink.h"
+#pragma GCC diagnostic pop
 
 #include "config.h"
 
@@ -32,7 +36,7 @@ private:
     int uart_poll();
     int udps_poll();
     int udpc_poll();
-    int mavlink_handler(unsigned char *buf, int len);
+    int mavlink_handler(mavlink_message_t &msg, mavlink_status_t &status);
     void cc_send(unsigned char *buf, int len);
 
     int ipc1_poll();
@@ -71,6 +75,7 @@ private:
         COM_UDPC
     } com_uart_udp_type;
     std::string com_uart_path;
+    int com_uart_baud;
     int com_udpls_port;
     int com_udprs_port;
     std::string com_udprs_addr;

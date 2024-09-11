@@ -21,11 +21,6 @@
 #include <sys/wait.h>
 #include <time.h>
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Waddress-of-packed-member"
-#include "ardupilotmega/mavlink.h"
-#pragma GCC diagnostic pop
-
 #include "bridge.h"
 
 #define RATIO_SECOND_TO_MICRO_SECOND   1000000
@@ -38,6 +33,7 @@
 
 #define TAG_TYPE         "type"
 #define TAG_PATH         "path"
+#define TAG_BAUD         "baud"
 #define TAG_PORT         "port"
 #define TAG_UART         "uart"
 #define TAG_UDPS         "udps"
@@ -62,6 +58,7 @@ void MavlinkHandler::config_print(std::string title){
     ROS_INFO("uav rate: %.2fHz, %.0fus", mavlink_rate, update_interval);
 
     ROS_INFO("uart%s: %s", IS_ACTIVE(COM_UART, com_uart_udp_type), com_uart_path.c_str());
+    ROS_INFO("uart%s: %d", IS_ACTIVE(COM_UART, com_uart_udp_type), com_uart_baud);
     ROS_INFO("udpls%s: %s", IS_ACTIVE(COM_UDPS, com_uart_udp_type), "127.0.0.1");
     ROS_INFO("udpls%s: %d", IS_ACTIVE(COM_UDPS, com_uart_udp_type), com_udpls_port);
     ROS_INFO("udprs%s: %s", IS_ACTIVE(COM_UDPC, com_uart_udp_type), com_udprs_addr.c_str());
@@ -114,6 +111,7 @@ int MavlinkHandler::config_read(){
             std::string com_type = uav_com[i][TAG_TYPE].as<std::string>();
             if (com_type == TAG_UART) {
                 com_uart_path = uav_com[i][TAG_PATH].as<std::string>();
+                com_uart_baud = uav_com[i][TAG_BAUD].as<int>();
                 //ROS_INFO("%s: %s", TAG_UART, com_path.c_str());
             } else if (com_type == TAG_UDPS) {
                 com_udpls_port = uav_com[i][TAG_PORT].as<int>();
@@ -188,8 +186,8 @@ int MavlinkHandler::uart_create(){
     tty.c_oflag &= ~ONLCR; // Prevent conversion of newline to carriage return/line feed
     tty.c_cc[VTIME] = 10;    // Wait for up to 1s (10 deciseconds), returning as soon as any data is received.
     tty.c_cc[VMIN] = 0;
-    cfsetispeed(&tty, B1500000);
-    cfsetospeed(&tty, B1500000);
+    cfsetispeed(&tty, com_uart_baud);
+    cfsetospeed(&tty, com_uart_baud);
     
     if (tcsetattr(uart_fd, TCSANOW, &tty) != 0) {  // Save tty settings, also checking for error
         ROS_ERROR("Error %i from tcsetattr: %s", errno, strerror(errno));
@@ -352,158 +350,175 @@ int MavlinkHandler::mavlink_init(ros::NodeHandle &ros_nh){
     return 0;
 }
 
-int MavlinkHandler::mavlink_handler(unsigned char *buf, int len){
+int MavlinkHandler::mavlink_handler(mavlink_message_t &msg, mavlink_status_t &status){
+    int len;
     struct timeval tv;
-    mavlink_status_t status;
-    mavlink_message_t msg;
+    //ROS_INFO("recv msg ID %d, seq %d\n", msg.msgid, msg.seq);
 
-    //ROS_INFO("recv msg buf len %d\n", len);
-    
-   for (int i = 0; i < len; i++) {
-        if (!mavlink_parse_char(0, buf[i], &msg, &status)) continue;
-        if (msg.sysid == 255) continue;
+    if (msg.msgid == MAVLINK_MSG_ID_HEARTBEAT) {
+        mavlink_heartbeat_t hb;
+        mavlink_msg_heartbeat_decode(&msg, &hb);
 
-        //ROS_INFO("recv msg ID %d, seq %d\n", msg.msgid, msg.seq);
-        if (msg.msgid == MAVLINK_MSG_ID_HEARTBEAT) {
-            mavlink_heartbeat_t hb;
-            mavlink_msg_heartbeat_decode(&msg, &hb);
-
-            if (msg.sysid != mav_sysid) {
-                mav_sysid = msg.sysid;
-                ROS_INFO("found MAV %d", msg.sysid);
-            }
-
-            if (0 == time_offset_us) {
-                gettimeofday(&tv, NULL);
-                mavlink_msg_timesync_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, 0, tv.tv_sec*1000000+tv.tv_usec, mav_sysid, 1); //fill timesync with us instead of ns
-                len = mavlink_msg_to_send_buffer(buf, &msg);
-                cc_send(buf, len);
-
-                mavlink_msg_system_time_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, tv.tv_sec*1000000+tv.tv_usec, 0);
-                len = mavlink_msg_to_send_buffer(buf, &msg);
-                cc_send(buf, len);
-
-                mavlink_msg_set_gps_global_origin_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, mav_sysid, 247749434, 1210443077, 100000, tv.tv_sec*1000000+tv.tv_usec);
-                len = mavlink_msg_to_send_buffer(buf, &msg);
-                cc_send(buf, len);
-
-                ROS_INFO("sync time_offset_us = 0");
-            }
-
-            if (no_hr_imu) {
-                mavlink_msg_command_long_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, 0, 0, MAV_CMD_SET_MESSAGE_INTERVAL, 0, MAVLINK_MSG_ID_HIGHRES_IMU, update_interval, 0, 0, 0, 0, 0);
-                len = mavlink_msg_to_send_buffer(buf, &msg);
-                cc_send(buf, len);
-                ROS_INFO("HIGHRES_IMU set interval %0.2fus", update_interval);
-            }
-
-            if (no_att_q) {
-                mavlink_msg_command_long_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, 0, 0, MAV_CMD_SET_MESSAGE_INTERVAL, 0, MAVLINK_MSG_ID_ATTITUDE_QUATERNION, update_interval, 0, 0, 0, 0, 0);
-                len = mavlink_msg_to_send_buffer(buf, &msg);
-                cc_send(buf, len);
-                ROS_INFO("ATTITUDE_QUATERNION set interval %0.2fus", update_interval);
-            }
-
-            if (hb.custom_mode == COPTER_MODE_GUIDED) {
-                if (demo_stage == 0) {
-                    demo_stage = 1;
-                    gettimeofday(&tv, NULL);
-                    mavlink_msg_command_long_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, mav_sysid, 1, MAV_CMD_NAV_TAKEOFF, 0, 0, 0, 0, 0, 0, 0, 1);
-                    len = mavlink_msg_to_send_buffer(buf, &msg);
-                    cc_send(buf, len);
-                }
-            } else {
-                demo_stage = 0;
-            }
-
-            if (hb.base_mode & 128) {
-                if (gnd_alt == 0) {
-                    gnd_alt = latest_alt;
-                    start_x = latest_x;
-                    ROS_INFO("gnd viso alt %f, start x %f\n", gnd_alt, start_x);
-                }
-            } else {
-                gnd_alt = 0;
-            }
-        } else if (msg.msgid == MAVLINK_MSG_ID_TIMESYNC) {
-            mavlink_timesync_t ts;
-            mavlink_msg_timesync_decode(&msg, &ts);
-            if (ts.tc1 != 0) {
-                time_offset_us = ts.ts1 - ts.tc1;
-                ROS_INFO("sync time_offset_us=%ld", time_offset_us);
-            }
-        } else if (msg.msgid == MAVLINK_MSG_ID_STATUSTEXT) {
-            mavlink_statustext_t txt;
-            mavlink_msg_statustext_decode(&msg, &txt);
-            ROS_INFO("fc: %s", txt.text);
-        } else if (msg.msgid == MAVLINK_MSG_ID_HIGHRES_IMU) {
-            mavlink_highres_imu_t hr_imu;
-            mavlink_msg_highres_imu_decode(&msg, &hr_imu); // time_usec is time since boot
-            if (time_offset_us > 0 && hr_imu.time_usec > last_us) {
-#if 1
-                static int64_t effective_counts = 0;
-                static int64_t effective_offset_us = 0;
-                effective_counts++;
-                if (0 == (effective_counts % int64_t(mavlink_rate))){
-                    int64_t effective_rate = RATIO_SECOND_TO_MICRO_SECOND/(hr_imu.time_usec - last_us);
-                    ROS_INFO("MAVLINK_MSG_ID_HIGHRES_IMU frequency = %ldHz, should be %0.2fHz", 
-                              effective_rate, 
-                              mavlink_rate);
-                    effective_offset_us = 0;
-
-                    if (effective_rate >= 0.9*mavlink_rate && effective_rate <= 1.1*mavlink_rate){
-                        no_hr_imu = false;
-                        no_att_q = false;
-                    }
-                }
-#endif
-
-                last_us = hr_imu.time_usec;
-                sensor_msgs::Imu imu_msg;
-#if 0
-                imu_msg.header.stamp = ros::Time::now();
-#else
-                int64_t ts_us = hr_imu.time_usec + time_offset_us;
-                imu_msg.header.stamp.sec = ts_us / 1000000;
-                imu_msg.header.stamp.nsec = (ts_us % 1000000) * 1000;
-#endif
-                imu_msg.header.frame_id = "world";
-                imu_msg.linear_acceleration.x = hr_imu.xacc;
-                imu_msg.linear_acceleration.y = hr_imu.yacc;
-                imu_msg.linear_acceleration.z = hr_imu.zacc;
-                imu_msg.angular_velocity.x = hr_imu.xgyro;
-                imu_msg.angular_velocity.y = hr_imu.ygyro;
-                imu_msg.angular_velocity.z = hr_imu.zgyro;
-                imu_msg.orientation.w = att_q_w;
-                imu_msg.orientation.x = att_q_x;
-                imu_msg.orientation.y = att_q_y;
-                imu_msg.orientation.z = att_q_z;
-                imu_pub.publish(imu_msg);
-            }
-        } else if (msg.msgid == MAVLINK_MSG_ID_ATTITUDE_QUATERNION) {
-            mavlink_attitude_quaternion_t att_q;
-            mavlink_msg_attitude_quaternion_decode(&msg, &att_q);
-            att_q_w = att_q.q1;
-            att_q_x = att_q.q2;
-            att_q_y = att_q.q3;
-            att_q_z = att_q.q4;
+        if (msg.sysid != mav_sysid) {
+            mav_sysid = msg.sysid;
+            ROS_INFO("found MAV %d", msg.sysid);
         }
+
+        if (0 == time_offset_us) {
+            gettimeofday(&tv, NULL);
+            mavlink_msg_timesync_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, 0, tv.tv_sec*1000000+tv.tv_usec, mav_sysid, 1); //fill timesync with us instead of ns
+            len = mavlink_msg_to_send_buffer(buf, &msg);
+            cc_send(buf, len);
+
+            mavlink_msg_system_time_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, tv.tv_sec*1000000+tv.tv_usec, 0);
+            len = mavlink_msg_to_send_buffer(buf, &msg);
+            cc_send(buf, len);
+
+            mavlink_msg_set_gps_global_origin_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, mav_sysid, 247749434, 1210443077, 100000, tv.tv_sec*1000000+tv.tv_usec);
+            len = mavlink_msg_to_send_buffer(buf, &msg);
+            cc_send(buf, len);
+
+            ROS_INFO("sync time_offset_us = 0");
+        }
+
+        if (no_hr_imu) {
+            mavlink_msg_command_long_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, 0, 0, MAV_CMD_SET_MESSAGE_INTERVAL, 0, MAVLINK_MSG_ID_HIGHRES_IMU, update_interval, 0, 0, 0, 0, 0);
+            len = mavlink_msg_to_send_buffer(buf, &msg);
+            cc_send(buf, len);
+            ROS_INFO("HIGHRES_IMU set interval %0.2fus", update_interval);
+        }
+
+        if (no_att_q) {
+            mavlink_msg_command_long_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, 0, 0, MAV_CMD_SET_MESSAGE_INTERVAL, 0, MAVLINK_MSG_ID_ATTITUDE_QUATERNION, update_interval, 0, 0, 0, 0, 0);
+            len = mavlink_msg_to_send_buffer(buf, &msg);
+            cc_send(buf, len);
+            ROS_INFO("ATTITUDE_QUATERNION set interval %0.2fus", update_interval);
+        }
+
+        if (hb.custom_mode == COPTER_MODE_GUIDED) {
+            if (demo_stage == 0) {
+                demo_stage = 1;
+                gettimeofday(&tv, NULL);
+                mavlink_msg_command_long_pack(mav_sysid, MAVLINK_DEFAULT_COMP_ID, &msg, mav_sysid, 1, MAV_CMD_NAV_TAKEOFF, 0, 0, 0, 0, 0, 0, 0, 1);
+                len = mavlink_msg_to_send_buffer(buf, &msg);
+                cc_send(buf, len);
+            }
+        } else {
+            demo_stage = 0;
+        }
+
+        if (hb.base_mode & 128) {
+            if (gnd_alt == 0) {
+                gnd_alt = latest_alt;
+                start_x = latest_x;
+                ROS_INFO("gnd viso alt %f, start x %f\n", gnd_alt, start_x);
+            }
+        } else {
+            gnd_alt = 0;
+        }
+    } else if (msg.msgid == MAVLINK_MSG_ID_TIMESYNC) {
+        mavlink_timesync_t ts;
+        mavlink_msg_timesync_decode(&msg, &ts);
+        if (ts.tc1 != 0) {
+            time_offset_us = ts.ts1 - ts.tc1;
+            ROS_INFO("sync time_offset_us=%ld", time_offset_us);
+        }
+    } else if (msg.msgid == MAVLINK_MSG_ID_STATUSTEXT) {
+        mavlink_statustext_t txt;
+        mavlink_msg_statustext_decode(&msg, &txt);
+        ROS_INFO("fc: %s", txt.text);
+    } else if (msg.msgid == MAVLINK_MSG_ID_HIGHRES_IMU) {
+        mavlink_highres_imu_t hr_imu;
+        mavlink_msg_highres_imu_decode(&msg, &hr_imu); // time_usec is time since boot
+        if (time_offset_us > 0 && hr_imu.time_usec > last_us) {
+#if 1
+            static int64_t effective_counts = 0;
+            static int64_t effective_rate = int64_t(mavlink_rate);
+            effective_counts++;
+            if (0 == (effective_counts % effective_rate)){
+                int64_t effective_hz = RATIO_SECOND_TO_MICRO_SECOND/(hr_imu.time_usec - last_us);
+
+                if (effective_hz >= 0.9*mavlink_rate && effective_hz <= 1.1*mavlink_rate){
+                    ROS_INFO("MAVLINK_MSG_ID_HIGHRES_IMU frequency = %ldHz, should be %0.2fHz", 
+                                effective_hz, 
+                                mavlink_rate);
+                    effective_rate *= 5; //increase 5 times for checking
+                    no_hr_imu = false;
+                    no_att_q = false;
+                } else {
+                    ROS_WARN("MAVLINK_MSG_ID_HIGHRES_IMU frequency = %ldHz, should be %0.2fHz", 
+                                effective_hz, 
+                                mavlink_rate);
+                    effective_rate = int64_t(mavlink_rate);
+                    no_hr_imu = true;
+                    no_att_q = true;
+                }
+            }
+#endif
+
+            last_us = hr_imu.time_usec;
+            sensor_msgs::Imu imu_msg;
+#if 0
+            imu_msg.header.stamp = ros::Time::now();
+#else
+            int64_t ts_us = hr_imu.time_usec + time_offset_us;
+            imu_msg.header.stamp.sec = ts_us / 1000000;
+            imu_msg.header.stamp.nsec = (ts_us % 1000000) * 1000;
+#endif
+            imu_msg.header.frame_id = "world";
+            imu_msg.linear_acceleration.x = hr_imu.xacc;
+            imu_msg.linear_acceleration.y = hr_imu.yacc;
+            imu_msg.linear_acceleration.z = hr_imu.zacc;
+            imu_msg.angular_velocity.x = hr_imu.xgyro;
+            imu_msg.angular_velocity.y = hr_imu.ygyro;
+            imu_msg.angular_velocity.z = hr_imu.zgyro;
+            imu_msg.orientation.w = att_q_w;
+            imu_msg.orientation.x = att_q_x;
+            imu_msg.orientation.y = att_q_y;
+            imu_msg.orientation.z = att_q_z;
+            imu_pub.publish(imu_msg);
+        }
+    } else if (msg.msgid == MAVLINK_MSG_ID_ATTITUDE_QUATERNION) {
+        mavlink_attitude_quaternion_t att_q;
+        mavlink_msg_attitude_quaternion_decode(&msg, &att_q);
+        att_q_w = att_q.q1;
+        att_q_x = att_q.q2;
+        att_q_y = att_q.q3;
+        att_q_z = att_q.q4;
     }
 
     return 0;
 }
 
 int MavlinkHandler::uart_poll(){
+    mavlink_status_t status;
+    mavlink_message_t msg;
+    unsigned char byte;    
 
     if (!(pfds[0].revents & POLLIN)) {
         return 1;
     }
 
-    ssize_t len = read(uart_fd, buf, MAVLINK_DEFAULT_BUF_LEN);
-    return mavlink_handler(buf, len);
+    ssize_t len = read(uart_fd, &byte, 1);
+    if (len <= 0) {
+        return 2;
+    }
+
+    //ROS_INFO("uart_poll 0x%02x-", byte);
+    if (mavlink_parse_char(0, byte, &msg, &status)){
+        //ROS_INFO("recv msg ID %d, seq %d", msg.msgid, msg.seq);
+        
+        if (msg.sysid == 255) return 0;
+
+        return mavlink_handler(msg, status);
+    }
+
+    return 0;
 }
 
 int MavlinkHandler::udps_poll(){
+    mavlink_status_t status;
+    mavlink_message_t msg;
 
     if (!(pfds[0].revents & POLLIN)) {
         return 1;
@@ -511,10 +526,19 @@ int MavlinkHandler::udps_poll(){
 
     udp_len = sizeof(udp_addr);
     int len = recvfrom(udp_fd, buf, MAVLINK_DEFAULT_BUF_LEN, 0, (struct sockaddr *)&udp_addr, &udp_len);
-    return mavlink_handler(buf, len);
+
+    for (int i = 0; i < len; i++) {
+        if (!mavlink_parse_char(0, buf[i], &msg, &status)) continue;
+        if (msg.sysid == 255) continue;
+        return mavlink_handler(msg, status);
+    }
+    
+    return 2;
 }
 
 int MavlinkHandler::udpc_poll(){
+    mavlink_status_t status;
+    mavlink_message_t msg;
 
     if (!(pfds[0].revents & POLLIN)) {
         return 1;
@@ -522,7 +546,14 @@ int MavlinkHandler::udpc_poll(){
 
     udp_len = sizeof(udp_addr);
     int len = recvfrom(udp_fd, buf, MAVLINK_DEFAULT_BUF_LEN, 0, (struct sockaddr *) &udp_addr, &udp_len);
-    return mavlink_handler(buf, len);
+
+    for (int i = 0; i < len; i++) {
+        if (!mavlink_parse_char(0, buf[i], &msg, &status)) continue;
+        if (msg.sysid == 255) continue;
+        return mavlink_handler(msg, status);
+    }
+    
+    return 2;
 }
 
 void MavlinkHandler::cc_send(unsigned char *buf, int len){
@@ -705,6 +736,7 @@ MavlinkHandler::MavlinkHandler(){
     mavlink_rate      = MAVLINK_DEFAULT_RATE;
     update_interval   = RATIO_SECOND_TO_MICRO_SECOND/mavlink_rate;
     com_uart_path     = MAVLINK_DEFAULT_UART_PATH;
+    com_uart_baud     = MAVLINK_DEFAULT_UART_BAUD;
     com_udpls_port    = MAVLINK_DEFAULT_UDPS_PORT;
     com_udprs_addr    = MAVLINK_DEFAULT_UDPC_ADDR;
     com_udprs_port    = MAVLINK_DEFAULT_UDPC_PORT;

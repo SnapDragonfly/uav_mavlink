@@ -504,10 +504,15 @@ int MavlinkHandler::uart_poll(){
         return 2;
     }
 
-    //ROS_INFO("uart_poll 0x%02x-", byte);
+#if (MAVLINK_CODE_EFFICIENCY_OPTIMIZATION)
+    if (debug_enable) ROS_INFO("uart_poll 0x%02x-", byte);
+#endif /* MAVLINK_CODE_EFFICIENCY_OPTIMIZATION */
+
     if (mavlink_parse_char(0, byte, &msg, &status)){
-        //ROS_INFO("recv msg ID %d, seq %d", msg.msgid, msg.seq);
-        
+#if (MAVLINK_CODE_EFFICIENCY_OPTIMIZATION)
+        if (debug_enable)  ROS_INFO("recv msg ID %d, seq %d", msg.msgid, msg.seq);
+#endif /* MAVLINK_CODE_EFFICIENCY_OPTIMIZATION */
+
         if (msg.sysid == 255) return 0;
 
         return mavlink_handler(msg, status);

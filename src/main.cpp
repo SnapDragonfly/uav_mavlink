@@ -24,11 +24,11 @@ int main(int argc, char *argv[]) {
             return ret;
         }
 
-#if (MAVLINK_CODE_EFFICIENCY_OPTIMIZATION)
+#if defined(MAVLINK_CODE_DEBUG)
         if (mavlink_bridge.mvalink_debug()){
             ROS_INFO("%s: loop ret=%d", PACKAGE_NAME, ret);
         }
-#endif /* MAVLINK_CODE_EFFICIENCY_OPTIMIZATION */
+#endif /* MAVLINK_CODE_DEBUG */
     }
 
     ret = mavlink_bridge.mavlink_exit();

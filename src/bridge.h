@@ -60,6 +60,9 @@ private:
     /*
      * Member variables for mavlink
      */
+    mavlink_status_t status;
+    mavlink_message_t msg;
+    
     float update_interval;
     ros::Publisher imu_pub;
 

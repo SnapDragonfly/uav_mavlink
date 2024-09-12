@@ -18,4 +18,4 @@
 
 #define PACKAGE_CONFIG "config.yaml"
 
-#define MAVLINK_CODE_EFFICIENCY_OPTIMIZATION  1
+//#define MAVLINK_CODE_DEBUG

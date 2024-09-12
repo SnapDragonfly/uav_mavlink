@@ -491,8 +491,6 @@ int MavlinkHandler::mavlink_handler(mavlink_message_t &msg, mavlink_status_t &st
 }
 
 int MavlinkHandler::uart_poll(){
-    mavlink_status_t status;
-    mavlink_message_t msg;
     unsigned char byte;    
 
     if (!(pfds[0].revents & POLLIN)) {
@@ -504,14 +502,15 @@ int MavlinkHandler::uart_poll(){
         return 2;
     }
 
-#if (MAVLINK_CODE_EFFICIENCY_OPTIMIZATION)
-    if (debug_enable) ROS_INFO("uart_poll 0x%02x-", byte);
-#endif /* MAVLINK_CODE_EFFICIENCY_OPTIMIZATION */
+#if defined(MAVLINK_CODE_DEBUG)
+    if (debug_enable) printf("0x%02x ", byte);
+#endif /* MAVLINK_CODE_DEBUG */
 
     if (mavlink_parse_char(0, byte, &msg, &status)){
-#if (MAVLINK_CODE_EFFICIENCY_OPTIMIZATION)
+
+#if defined(MAVLINK_CODE_DEBUG)
         if (debug_enable)  ROS_INFO("recv msg ID %d, seq %d", msg.msgid, msg.seq);
-#endif /* MAVLINK_CODE_EFFICIENCY_OPTIMIZATION */
+#endif /* MAVLINK_CODE_DEBUG */
 
         if (msg.sysid == 255) return 0;
 
@@ -522,8 +521,6 @@ int MavlinkHandler::uart_poll(){
 }
 
 int MavlinkHandler::udps_poll(){
-    mavlink_status_t status;
-    mavlink_message_t msg;
 
     if (!(pfds[0].revents & POLLIN)) {
         return 1;
@@ -542,8 +539,6 @@ int MavlinkHandler::udps_poll(){
 }
 
 int MavlinkHandler::udpc_poll(){
-    mavlink_status_t status;
-    mavlink_message_t msg;
 
     if (!(pfds[0].revents & POLLIN)) {
         return 1;

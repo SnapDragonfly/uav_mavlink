@@ -438,7 +438,7 @@ int MavlinkHandler::mavlink_handler(mavlink_message_t &msg, mavlink_status_t &st
             if (0 == (effective_counts % effective_rate)){
                 int64_t effective_hz = RATIO_SECOND_TO_MICRO_SECOND/(hr_imu.time_usec - last_us);
 
-                if (effective_hz >= 0.9*mavlink_rate && effective_hz <= 1.1*mavlink_rate){
+                if (effective_hz >= 0.9*mavlink_rate && effective_hz <= 1.5*mavlink_rate){
                     ROS_INFO("MAVLINK_MSG_ID_HIGHRES_IMU frequency = %ldHz, should be %0.2fHz", 
                                 effective_hz, 
                                 mavlink_rate);

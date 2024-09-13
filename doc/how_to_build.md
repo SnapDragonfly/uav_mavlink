@@ -19,5 +19,5 @@ $ cd uav_mavlink
 $ git submodule init
 $ git submodule update
 $ cd ../../
-$ catkin_make --pkg uav_mavlink
+$ catkin_make --pkg uav_bridge
 ```

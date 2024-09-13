@@ -8,10 +8,10 @@ $ source devel/setup.bash
 $ roscore
 ```
 
-Open another terminal and run uav_mavlink app.
+Open another terminal and run uav_uav_bridge_mavlink node.
 
 ```
 $ cd ~/catkin_ws
 $ source devel/setup.bash
-$ rosrun uav_mavlink uav_mavlink_node
+$ rosrun uav_uav_bridge uav_uav_bridge_mavlink
 ```

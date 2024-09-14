@@ -32,6 +32,7 @@
 
 #include <signal.h>
 
+#include "config.h"
 
 bool signal_recieved = false;
 
@@ -63,9 +64,9 @@ int usage()
 int main( int argc, char** argv )
 {
     // Initialize ROS
-    ros::init(argc, argv, "video_viewer_node");
+    ros::init(argc, argv, PACKAGE_NAME);
     ros::NodeHandle nh;
-    ros::Publisher image_pub = nh.advertise<sensor_msgs::Image>("/cam0/image_raw", 1);
+    ros::Publisher image_pub = nh.advertise<sensor_msgs::Image>(CAMERA_DEFAULT_IMAGE_TOPIC, 1);
 
     // Parse command line
 	commandLine cmdLine(argc, argv);
@@ -128,7 +129,7 @@ int main( int argc, char** argv )
 		
 		numFrames++;
 		
-		#if 1
+#if defined(CAMERA_CODE_DEBUG)
 		if( output != NULL )
 		{
 			output->Render(image, input->GetWidth(), input->GetHeight());
@@ -142,7 +143,7 @@ int main( int argc, char** argv )
 			if( !output->IsStreaming() )
 				break;
 		}
-		#endif
+#endif /* CAMERA_CODE_DEBUG */
 
         // Convert frame to ROS image message
         cv::Mat cv_image(input->GetHeight(), input->GetWidth(), CV_8UC3, image);

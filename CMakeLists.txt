@@ -5,7 +5,17 @@ project(uav_bridge)
 # add_compile_options(-std=c++11)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 set(yaml-cpp_DIR "/usr/lib/aarch64-linux-gnu/cmake/yaml-cpp")
+set(cv_bridge_DIR "/usr/local/share/cv_bridge/cmake")
+set(jetson-utils_DIR /usr/local/share/jetson-utils/cmake/)
+
+# Set the path to jetson-utils
+set(JETSON_UTILS_INCLUDE_DIRS /usr/local/include/jetson-utils)
+set(JETSON_UTILS_LIBRARIES /usr/local/lib/libjetson-utils.so)
+
+set(CUDA_INCLUDE_DIRS /usr/local/cuda/include)
+set(MAVLINK_INCLUDE_DIRS mavlink)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -15,11 +25,14 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
+  sensor_msgs
+  cv_bridge
+  image_transport
+  jetson-utils
 )
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
-
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -111,6 +124,7 @@ catkin_package(
 #  LIBRARIES hello
 #  CATKIN_DEPENDS roscpp rospy std_msgs
 #  DEPENDS system_lib
+  CATKIN_DEPENDS roscpp sensor_msgs cv_bridge image_transport
 )
 
 ###########
@@ -120,8 +134,12 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-# include
-  ${catkin_INCLUDE_DIRS} mavlink
+  include
+  ${catkin_INCLUDE_DIRS}
+  ${OpenCV_INCLUDE_DIRS}
+  ${JETSON_UTILS_INCLUDE_DIRS}
+  ${CUDA_INCLUDE_DIRS}
+  ${MAVLINK_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -138,6 +156,7 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(${PROJECT_NAME}_mavlink src/uav_mavlink.cpp src/bridge.cpp)
+add_executable(${PROJECT_NAME}_camera src/uav_camera.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -153,6 +172,11 @@ add_executable(${PROJECT_NAME}_mavlink src/uav_mavlink.cpp src/bridge.cpp)
 target_link_libraries(${PROJECT_NAME}_mavlink
   ${catkin_LIBRARIES} yaml-cpp stdc++fs
 )
+target_link_libraries(${PROJECT_NAME}_camera 
+  ${catkin_LIBRARIES} ${OpenCV_LIBRARIES} ${JETSON_UTILS_LIBRARIES} yaml-cpp 
+)
+
+#${CUDA_LIBRARY_DIRS}
 
 #############
 ## Install ##

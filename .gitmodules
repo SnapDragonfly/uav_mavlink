@@ -4,3 +4,6 @@
 [submodule "vision_opencv"]
 	path = vision_opencv
 	url = git@github.com:ros-perception/vision_opencv.git
+[submodule "jetson-utils"]
+	path = jetson-utils
+	url = git@github.com:dusty-nv/jetson-utils.git

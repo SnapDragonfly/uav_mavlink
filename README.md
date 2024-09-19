@@ -30,9 +30,15 @@ Camera  <-- CSI/RTP -->  uav_bridge_camera
 - [x] Support UART connection with Ardupilot
 - [x] Support UDP Client connection with Ardupilot
 - [x] Support UDP Server connection from Ardupilot
+- [x] Support CSI/RTP video feed
 - [ ] IPC1???
 - [ ] IPC2???
-- [ ] Support CSI/RTP video feed
+
+# ToDo
+
+- add image timestamp
+- clarify IPC1/IPC2 usage
+- join test with wfb-ng
 
 
 

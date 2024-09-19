@@ -2,13 +2,13 @@
 
 # Section 1: rates for polling HIGHRES_IMU and ATTITUDE_QUATERNION
 # Recommended for VINS Mono, 100Hz
-mavlink_rate: 50
+mavlink_rate: 100
 
 # Section 2: link between ardupilot and uav_mavlink
 # "uart" --> UART
 # "udpc" --> UDP Client
 # "udps" --> UDP Server
-mavlink_activate: "uart"
+mavlink_activate: "udpc"
 
 # Section 3: drone links
 # Currently, there is only one link, dual link might be considered for backup.

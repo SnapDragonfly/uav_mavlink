@@ -1,5 +1,6 @@
 
-#define PACKAGE_NAME "uav_bridge_mavlink"
+#define PACKAGE_NAME "uav_bridge"
+#define NODE_NAME    "uav_bridge_mavlink"
 
 #define MAVLINK_DEFAULT_COMP_ID   191
 #define MAVLINK_DEFAULT_NUM_PFDS  3

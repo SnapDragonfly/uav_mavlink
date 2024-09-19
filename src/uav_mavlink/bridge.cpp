@@ -3,6 +3,8 @@
 #include <string>
 #include <filesystem>  // C++17
 
+#include <ros/package.h>
+
 #include <yaml-cpp/yaml.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -75,15 +77,12 @@ void MavlinkHandler::config_print(std::string title){
 
 int MavlinkHandler::config_read(){
     try {
-        //config_print("debug");
+        //config_print("debug");      
 
-        // Get the current working directory
-        std::filesystem::path work_path = std::filesystem::current_path();
-        //ROS_INFO("Current working directory: %s", work_path.c_str());
-
-        // Construct the absolute path to the config file
-        std::filesystem::path config_path = work_path / "src" / PACKAGE_NAME / PACKAGE_CONFIG;
-        //ROS_INFO("Config file path: %s", config_path.c_str());
+        // Get the directory path of a package
+        std::filesystem::path package_path = ros::package::getPath(PACKAGE_NAME);
+        std::filesystem::path config_path = package_path / PACKAGE_CONFIG;
+        ROS_INFO("Config file path: %s", config_path.c_str());
 
         // Load the YAML file
         YAML::Node config = YAML::LoadFile(config_path.c_str());

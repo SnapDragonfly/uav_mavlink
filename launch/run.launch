@@ -1,7 +1,7 @@
 <launch>
   <!-- uav_bridge bridging video feed -->
   <node pkg="uav_bridge" name="uav_bridge_camera" type="uav_bridge_camera" output="screen" args="rtp://@:5400">
-    <remap from="/tmp/uav_bridge/cam0/image_raw" to="/tmp/uav_cam0"/>
+    <!-- remap from="/tmp/uav_bridge/cam0/image_raw" to="/tmp/uav_cam0"/ -->
   </node>
 
   <!-- uav_bridge bridging mavlink message -->

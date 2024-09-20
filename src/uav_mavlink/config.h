@@ -17,6 +17,6 @@
 
 #define MAVLINK_DEFAULT_BUF_LEN   512
 
-#define PACKAGE_CONFIG "config.yaml"
+#define PACKAGE_CONFIG "config_mavlink.yaml"
 
 //#define MAVLINK_CODE_DEBUG

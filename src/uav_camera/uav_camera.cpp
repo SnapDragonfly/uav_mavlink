@@ -19,10 +19,19 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+
+
+#include <iostream>
+#include <string>
+#include <filesystem>  // C++17
+
 #include "ros/ros.h"
+#include <ros/package.h>
 #include "sensor_msgs/Image.h"
 #include "cv_bridge/cv_bridge.h"
 #include "opencv2/opencv.hpp"
+
+#include <yaml-cpp/yaml.h>
 
 #include "videoSource.h"
 #include "videoOutput.h"
@@ -34,7 +43,20 @@
 
 #include "config.h"
 
-bool signal_recieved = false;
+#define TAG_IMG_LATENCY         "img_latency"
+#define TAG_IMG_SOURCE          "img_source"
+#define TAG_IMG_TOPIC           "img_topic"
+#define TAG_IMG_DEBUG           "debug"
+
+bool signal_recieved   = false;
+videoOutput* output    = NULL;
+
+bool debug_enable      = true;
+int  img_latency       = 100;
+std::string img_source = CAMERA_DEFAULT_IMAGE_SOURCE;
+std::string img_topic  = CAMERA_DEFAULT_IMAGE_TOPIC;
+char params[CAMERA_ARGC_LEN][CAMERA_ARGV_LEN];
+char* params_ptr[CAMERA_ARGC_LEN];
 
 void sig_handler(int signo)
 {
@@ -43,6 +65,59 @@ void sig_handler(int signo)
 		LogInfo("received SIGINT\n");
 		signal_recieved = true;
 	}
+}
+
+void config_print(const char* title){
+    printf("%s ------------->\n", title);
+
+    printf("img latency: %d\n", img_latency);
+    printf(" img source: %s\n",img_source.c_str());
+	printf("  img topic: %s\n",img_topic.c_str());
+
+    printf("debug: %s\n", debug_enable?"true":"false");
+
+    printf("%s <-------------\n", title);
+}
+
+int config_read(int argc, char** argv){
+    try {   
+        // Get the directory path of a package
+        std::filesystem::path package_path = ros::package::getPath(PACKAGE_NAME);
+        std::filesystem::path config_path = package_path / PACKAGE_CONFIG;
+        printf("Config file path: %s\n", config_path.c_str());
+
+        // Load the YAML file
+        YAML::Node config = YAML::LoadFile(config_path.c_str());
+
+        img_latency  = config[TAG_IMG_LATENCY].as<int>();
+        img_topic    = config[TAG_IMG_TOPIC].as<std::string>();
+        img_source   = config[TAG_IMG_SOURCE].as<std::string>();
+
+        debug_enable = config[TAG_IMG_DEBUG].as<bool>();
+
+		config_print("set"); 
+		// Assign argc/argv
+		memset(params[0], 0, CAMERA_ARGV_LEN);
+		strncpy(params[0], argv[0], CAMERA_ARGV_LEN - 1);
+		memset(params[1], 0, CAMERA_ARGV_LEN);
+		strncpy(params[1], img_source.c_str(), strlen(img_source.c_str()));
+
+		params_ptr[0] = params[0];
+		params_ptr[1] = params[1];
+    }
+    catch (const std::runtime_error& e) {
+        ROS_ERROR("Runtime error: %s", e.what());
+        return 1;  // Return a non-zero value to indicate an error occurred
+    }
+    catch (const std::exception& e) {
+        ROS_ERROR("Exception: %s", e.what());
+        return 2;  // Return a non-zero value to indicate an error occurred
+    }
+    catch (...) {
+        ROS_ERROR("Unknown exception occurred");
+        return 3;  // Return a non-zero value to indicate an error occurred
+    }
+    return 0;
 }
 
 int usage()
@@ -64,14 +139,14 @@ int usage()
 int main( int argc, char** argv )
 {
     // Initialize ROS
-    ros::init(argc, argv, PACKAGE_NAME);
+    ros::init(argc, argv, NODE_NAME);
     ros::NodeHandle nh;
-    ros::Publisher image_pub = nh.advertise<sensor_msgs::Image>(CAMERA_DEFAULT_IMAGE_TOPIC, 1);
-
+    
+	int ret = config_read(argc, argv);
     // Parse command line
-	commandLine cmdLine(argc, argv);
+	commandLine cmdLine(ret?argc:CAMERA_ARGC_LEN, ret?argv:&params_ptr[0]);
 
-	if( cmdLine.GetFlag("help") )
+	if( ret && cmdLine.GetFlag("help") )
 		return usage();
 
 
@@ -82,6 +157,7 @@ int main( int argc, char** argv )
 		LogError("can't catch SIGINT\n");
 
 
+	ros::Publisher image_pub = nh.advertise<sensor_msgs::Image>(img_topic.c_str(), 1);
 	/*
 	 * create input video stream
 	 */
@@ -94,15 +170,17 @@ int main( int argc, char** argv )
 	}
 
 
-	/*
-	 * create output video stream
-	 */
-	videoOutput* output = videoOutput::Create(cmdLine, ARG_POSITION(1));
-	
-	if( !output )
-	{
-		LogError("video-viewer:  failed to create output stream\n");
-		return 0;
+	if(debug_enable){
+		/*
+		* create output video stream
+		*/
+		output = videoOutput::Create(cmdLine, ARG_POSITION(1));
+		
+		if( !output )
+		{
+			LogError("video-viewer:  failed to create output stream\n");
+			return 0;
+		}
 	}
 	
 
@@ -129,21 +207,21 @@ int main( int argc, char** argv )
 		
 		numFrames++;
 		
-#if defined(CAMERA_CODE_DEBUG)
-		if( output != NULL )
-		{
-			output->Render(image, input->GetWidth(), input->GetHeight());
+		if(debug_enable){
+			if( output != NULL )
+			{
+				output->Render(image, input->GetWidth(), input->GetHeight());
 
-			// update status bar
-			char str[256];
-			sprintf(str, "Video Viewer (%ux%u) | %.1f FPS", input->GetWidth(), input->GetHeight(), output->GetFrameRate());
-			output->SetStatus(str);	
+				// update status bar
+				char str[256];
+				sprintf(str, "Video Viewer (%ux%u) | %.1f FPS", input->GetWidth(), input->GetHeight(), output->GetFrameRate());
+				output->SetStatus(str);	
 
-			// check if the user quit
-			if( !output->IsStreaming() )
-				break;
+				// check if the user quit
+				if( !output->IsStreaming() )
+					break;
+			}
 		}
-#endif /* CAMERA_CODE_DEBUG */
 
 #if 0
         // Convert frame to ROS image message
@@ -189,7 +267,10 @@ int main( int argc, char** argv )
 	printf("video-viewer:  shutting down...\n");
 	
 	SAFE_DELETE(input);
-	SAFE_DELETE(output);
+
+	if(debug_enable){
+		SAFE_DELETE(output);
+	}
 
 	printf("video-viewer:  shutdown complete\n");
 }

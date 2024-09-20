@@ -11,9 +11,9 @@
 #define MAVLINK_DEFAULT_UDPS_PORT 14580
 #define MAVLINK_DEFAULT_UDPC_ADDR "192.168.1.100"
 #define MAVLINK_DEFAULT_UDPC_PORT 14570
-#define MAVLINK_DEFAULT_IPC_PATH1 "/tmp/chobits_server"
-#define MAVLINK_DEFAULT_IPC_PATH2 "/tmp/chobits_server2"
-#define MAVLINK_DEFAULT_IMU_TOPIC "/chobits/imu"
+#define MAVLINK_DEFAULT_IPC_PATH1 "/tmp/uav_bridge/ipc_server"
+#define MAVLINK_DEFAULT_IPC_PATH2 "/tmp/uav_bridge/ipc_server2"
+#define MAVLINK_DEFAULT_IMU_TOPIC "/tmp/uav_bridge/imu"
 
 #define MAVLINK_DEFAULT_BUF_LEN   512
 

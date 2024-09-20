@@ -145,10 +145,39 @@ int main( int argc, char** argv )
 		}
 #endif /* CAMERA_CODE_DEBUG */
 
+#if 0
         // Convert frame to ROS image message
         cv::Mat cv_image(input->GetHeight(), input->GetWidth(), CV_8UC3, image);
         sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image).toImageMsg();
+		msg->header.stamp = ros::Time::now();
+		msg->header.frame_id = "camera_link";
+		msg->width = input->GetWidth();
+		msg->height = input->GetHeight();
+		msg->encoding = "bgr8";
+		msg->is_bigendian = 0;
+		if (msg->data.size() != msg->width * msg->height * 3) {
+			ROS_ERROR("Image data size mismatch: expected %d, got %ld", msg->width * msg->height * 3, msg->data.size());
+		}
         image_pub.publish(msg);
+#else
+		// Convert frame to ROS image message
+		cv::Mat cv_image(input->GetHeight(), input->GetWidth(), CV_8UC3, image);
+		sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image).toImageMsg();
+		msg->header.stamp = ros::Time::now();
+		msg->header.frame_id = "world";
+		msg->width = cv_image.cols;
+		msg->height = cv_image.rows;
+		msg->encoding = "bgr8";
+		msg->is_bigendian = 0;
+		msg->step = msg->width * 3;
+
+		// Check if the size of the image data matches the expected size
+		if (msg->data.size() != msg->height * msg->step) {
+			ROS_ERROR("Image data size mismatch: expected %d, got %ld", msg->height * msg->step, msg->data.size());
+		}
+#endif
+		// Publish the image message
+		image_pub.publish(msg);
 
         ros::spinOnce(); // Handle ROS callbacks
 	}

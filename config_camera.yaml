@@ -3,7 +3,7 @@
 # Section 1: image latency from camera to uav_camera
 img_latency: 50
 
-# Section 2: image source, csi://0 or rtp://@5400
+# Section 2: image source, csi://0 or rtp://@:5400
 img_source: "rtp://@:5400"
 
 # Section 3: ROS topic for IMU data

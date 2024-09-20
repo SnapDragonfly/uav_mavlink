@@ -12,6 +12,9 @@ And it oriented to simplify configuration and handles different kind of interfac
 
 *The original code comes from: https://github.com/chobitsfan/mavlink-udp-proxy*
 
+
+[![Watch uav_bridge rviz test](https://img.youtube.com/vi/ewxGkjimbnc/0.jpg)](https://youtu.be/ewxGkjimbnc)
+
 # Software Diagram
 
 ```

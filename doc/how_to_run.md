@@ -1,5 +1,15 @@
 # How to run the program?
 
+# Run program in test environment
+
+```
+$ cd ~/catkin_ws
+$ source devel/setup.bash
+$ roslaunch uav_bridge run.launch
+```
+
+# Run programs separately
+
 Open terminal 1 and run roscore.
 
 ```

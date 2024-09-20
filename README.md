@@ -36,7 +36,6 @@ Camera  <-- CSI/RTP -->  uav_bridge_camera
 
 # ToDo
 
-- add image timestamp
 - clarify IPC1/IPC2 usage
 - join test with wfb-ng
 

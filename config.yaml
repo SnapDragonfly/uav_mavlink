@@ -8,7 +8,7 @@ mavlink_rate: 100
 # "uart" --> UART
 # "udpc" --> UDP Client
 # "udps" --> UDP Server
-mavlink_activate: "udpc"
+mavlink_activate: "udps"
 
 # Section 3: drone links
 # Currently, there is only one link, dual link might be considered for backup.

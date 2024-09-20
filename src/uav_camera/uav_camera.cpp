@@ -240,7 +240,7 @@ int main( int argc, char** argv )
         // Convert frame to ROS image message
         cv::Mat cv_image(input->GetHeight(), input->GetWidth(), CV_8UC3, image);
         sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image).toImageMsg();
-        msg->header.stamp = ros::Time::now();
+        msg->header.stamp = ros::Time::now() - ros::Duration(img_latency / 1000.0);
         msg->header.frame_id = "world";
         msg->width = cv_image.cols;
         msg->height = cv_image.rows;

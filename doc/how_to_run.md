@@ -5,7 +5,7 @@
 ```
 $ cd ~/catkin_ws
 $ source devel/setup.bash
-$ roslaunch uav_bridge run.launch
+$ roslaunch uav_bridge run_test.launch
 ```
 
 # Run programs separately

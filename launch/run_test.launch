@@ -8,6 +8,6 @@
   <node pkg="uav_bridge" name="uav_bridge_mavlink" type="uav_bridge_mavlink" output="screen">
   </node>
 
-  <include file="$(find uav_bridge)/launch/rviz.launch"/>
+  <include file="$(find uav_bridge)/launch/rviz_default.launch"/>
 
 </launch>

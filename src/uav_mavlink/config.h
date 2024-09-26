@@ -1,9 +1,14 @@
 
-#define PACKAGE_NAME "uav_bridge"
-#define NODE_NAME    "uav_bridge_mavlink"
+#ifndef CONFIG_HANDLER_H
+#define CONFIG_HANDLER_H
 
-#define MAVLINK_DEFAULT_COMP_ID   191
-#define MAVLINK_DEFAULT_NUM_PFDS  3
+#include <memory>
+
+#include "global.h"
+#include "bridge.h"
+
+
+
 #define MAVLINK_DEFAULT_RATE      100
 
 #define MAVLINK_DEFAULT_UART_PATH "/dev/ttyAMA0"
@@ -15,8 +20,42 @@
 #define MAVLINK_DEFAULT_IPC_PATH2 "/tmp/uav_bridge/ipc_server2"
 #define MAVLINK_DEFAULT_IMU_TOPIC "/tmp/uav_bridge/imu"
 
-#define MAVLINK_DEFAULT_BUF_LEN   512
-
 #define PACKAGE_CONFIG "config_mavlink.yaml"
 
-//#define MAVLINK_CODE_DEBUG
+class ConfigHandler {
+public:
+    // Constructor and Destructor
+    ConfigHandler();
+    ~ConfigHandler(){
+    };
+
+    // Public methods
+    int config_read(std::unique_ptr<BridgeHandler>& bridge);
+    void config_print(std::string title);
+
+public:
+    /*
+     * Member variables for configuration
+     */
+    std::string mavlink_activate;
+    float mavlink_rate;
+    enum ComType {
+        COM_UART,
+        COM_UDPS,
+        COM_UDPC
+    } com_uart_udp_type;
+
+    std::string com_uart_path;
+    int com_uart_baud;
+    int com_udpls_port;
+    int com_udprs_port;
+    std::string com_udprs_addr;
+
+    std::string ipc1_path;
+    std::string ipc2_path;
+    std::string imu_topic;
+
+    bool debug_enable;
+};
+
+#endif /* CONFIG_HANDLER_H */

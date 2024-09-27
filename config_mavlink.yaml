@@ -5,10 +5,11 @@
 mavlink_rate: 100
 
 # Section 2: link between ardupilot and uav_mavlink
-# "uart" --> UART
-# "udpc" --> UDP Client
-# "udps" --> UDP Server
-mavlink_activate: "udps"
+# "uart"  --> UART
+# "udpc"  --> UDP Client
+# "udps"  --> UDP Server
+# "split" --> splitter, which is used for time critical image&imu sync data
+mavlink_activate: "split"
 
 # Section 3: drone links
 # Currently, there is only one link, dual link might be considered for backup.
@@ -18,10 +19,18 @@ uav_com:
     path: "/dev/ttyUSB0"
     baud: 921600
   - type: "udps"
-    port: 14560
+    port-s: 14560
   - type: "udpc"
     port: 14550
     addr: "192.168.1.15"
+  - type: "split"
+    port-s: 5400
+    port: 5600
+    addr: "127.0.0.1"
+    clock: 90800
+    sync: 5000
+    frame: 60
+    threshold: 5
 
 # Section 4: IPC links between VINS Mono/Fusion, ego-planner and uav_mavlink
 # "ipc1" --> for att_pos_mocap/vision_speed_estimate 

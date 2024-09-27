@@ -12,7 +12,6 @@
 #include "bridge.h"
 
 #define MAVLINK_DEFAULT_COMP_ID   191
-#define MAVLINK_DEFAULT_BUF_LEN   512
 
 
 class MessageHandler {

@@ -19,6 +19,9 @@ public:
     virtual int deinit() = 0;
 
     // Common methods
+    virtual void set(int clock, int frame, int sync, int threshold){
+        //do nothing
+    }
     int get(){
         return fd;
     }

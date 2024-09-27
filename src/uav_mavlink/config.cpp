@@ -9,6 +9,7 @@
 #include "uart.h"
 #include "udpc.h"
 #include "udps.h"
+#include "splitter.h"
 
 #define TAG_TYPE_IPC     "ipcs"
 #define TAG_TYPE_IPC1    "ipc1"
@@ -19,11 +20,17 @@
 #define TAG_TYPE         "type"
 #define TAG_PATH         "path"
 #define TAG_BAUD         "baud"
+#define TAG_ADDR         "addr"
 #define TAG_PORT         "port"
+#define TAG_PORT_S       "port-s"
 #define TAG_UART         "uart"
 #define TAG_UDPS         "udps"
 #define TAG_UDPC         "udpc"
-#define TAG_ADDR         "addr"
+#define TAG_SPLIT        "split"
+#define TAG_CLOCK        "clock"
+#define TAG_SYNC_NUM     "sync"
+#define TAG_FRAME_HZ     "frame"
+#define TAG_THRESHOLD    "threshold"
 
 #define TAG_UAV_COM      "uav_com"
 #define TAG_UAV_IMU      "uav_imu"
@@ -47,9 +54,15 @@ ConfigHandler::ConfigHandler(){
     com_udpls_port    = MAVLINK_DEFAULT_UDPS_PORT;
     com_udprs_addr    = MAVLINK_DEFAULT_UDPC_ADDR;
     com_udprs_port    = MAVLINK_DEFAULT_UDPC_PORT;
+    com_splitter_addr = MAVLINK_DEFAULT_SPLITTER_ADDR;
+    com_splitter_port = MAVLINK_DEFAULT_SPLITTER_PORT;
     ipc1_path         = MAVLINK_DEFAULT_IPC_PATH1;
     ipc2_path         = MAVLINK_DEFAULT_IPC_PATH2;
     imu_topic         = MAVLINK_DEFAULT_IMU_TOPIC;
+    splitter_camera_clcok_hz  = SPLITTER_CAMERA_CLOCK_HZ;
+    splitter_camera_frame_hz  = SPLITTER_CAMERA_FRAME_HZ;
+    splitter_camera_sync_num  = SPLITTER_CAMERA_SYNC_NUM;
+    splitter_camera_threshold = SPLITTER_CAMERA_THRESHOLD;
 
     debug_enable      = true;
 };
@@ -60,13 +73,21 @@ void ConfigHandler::config_print(std::string title){
     ROS_INFO("uav active: %s", mavlink_activate.c_str());
     ROS_INFO("uav rate: %.2fHz, %.0fus", mavlink_rate, RATIO_SECOND_TO_MICRO_SECOND/mavlink_rate);
 
-    ROS_INFO("uart%s: %s", IS_ACTIVE(COM_UART, com_uart_udp_type), com_uart_path.c_str());
-    ROS_INFO("uart%s: %d", IS_ACTIVE(COM_UART, com_uart_udp_type), com_uart_baud);
-    ROS_INFO("udpls%s: %s", IS_ACTIVE(COM_UDPS, com_uart_udp_type), "127.0.0.1");
-    ROS_INFO("udpls%s: %d", IS_ACTIVE(COM_UDPS, com_uart_udp_type), com_udpls_port);
-    ROS_INFO("udprs%s: %s", IS_ACTIVE(COM_UDPC, com_uart_udp_type), com_udprs_addr.c_str());
-    ROS_INFO("udprs%s: %d", IS_ACTIVE(COM_UDPC, com_uart_udp_type), com_udprs_port);
-    
+    ROS_INFO("     uart%s: %s", IS_ACTIVE(COM_UART, com_uart_udp_type), com_uart_path.c_str());
+    ROS_INFO("     rate%s: %d", IS_ACTIVE(COM_UART, com_uart_udp_type), com_uart_baud);
+    ROS_INFO("    udpls%s: %s", IS_ACTIVE(COM_UDPS, com_uart_udp_type), "127.0.0.1");
+    ROS_INFO("     port%s: %d", IS_ACTIVE(COM_UDPS, com_uart_udp_type), com_udpls_port);
+    ROS_INFO("    udprs%s: %s", IS_ACTIVE(COM_UDPC, com_uart_udp_type), com_udprs_addr.c_str());
+    ROS_INFO("     port%s: %d", IS_ACTIVE(COM_UDPC, com_uart_udp_type), com_udprs_port);
+    ROS_INFO(" splitter%s: %s", IS_ACTIVE(COM_SPLIT, com_uart_udp_type), com_splitter_addr.c_str());
+    ROS_INFO("     port%s: %d", IS_ACTIVE(COM_SPLIT, com_uart_udp_type), com_splitter_port);
+    ROS_INFO("   port-s%s: %d", IS_ACTIVE(COM_SPLIT, com_uart_udp_type), com_splitter_port_s);
+    ROS_INFO("    clock%s: %d", IS_ACTIVE(COM_SPLIT, com_uart_udp_type), splitter_camera_clcok_hz);
+    ROS_INFO("    frame%s: %d", IS_ACTIVE(COM_SPLIT, com_uart_udp_type), splitter_camera_frame_hz);
+    ROS_INFO("     sync%s: %d", IS_ACTIVE(COM_SPLIT, com_uart_udp_type), splitter_camera_sync_num);
+    ROS_INFO("threshold%s: %.3f", IS_ACTIVE(COM_SPLIT, com_uart_udp_type), splitter_camera_threshold);
+
+
     ROS_INFO("ipc1: %s", ipc1_path.c_str());
     ROS_INFO("ipc2: %s", ipc2_path.c_str());
     ROS_INFO(" imu: %s", imu_topic.c_str());
@@ -105,12 +126,21 @@ int ConfigHandler::config_read(std::unique_ptr<BridgeHandler>& bridge){
                 com_uart_baud = uav_com[i][TAG_BAUD].as<int>();
                 //ROS_INFO("%s: %s", TAG_UART, com_path.c_str());
             } else if (com_type == TAG_UDPS) {
-                com_udpls_port = uav_com[i][TAG_PORT].as<int>();
+                com_udpls_port = uav_com[i][TAG_PORT_S].as<int>();
                 //ROS_INFO("%s: %d", TAG_UDP, com_port);
             } else if (com_type == TAG_UDPC) {
                 com_udprs_port = uav_com[i][TAG_PORT].as<int>();
                 com_udprs_addr = uav_com[i][TAG_ADDR].as<std::string>();
                 //ROS_INFO("%s: %d", TAG_UDP, com_port);
+            } else if (com_type == TAG_SPLIT) {
+                com_splitter_port_s = uav_com[i][TAG_PORT_S].as<int>();
+                com_splitter_port   = uav_com[i][TAG_PORT].as<int>();
+                com_splitter_addr   = uav_com[i][TAG_ADDR].as<std::string>();
+                splitter_camera_clcok_hz  = uav_com[i][TAG_CLOCK].as<int>();
+                splitter_camera_frame_hz  = uav_com[i][TAG_FRAME_HZ].as<int>();
+                splitter_camera_sync_num  = uav_com[i][TAG_SYNC_NUM].as<int>();
+                splitter_camera_threshold = uav_com[i][TAG_THRESHOLD].as<float>();
+                //ROS_INFO("%s: %d", TAG_SPLIT, com_port);
             }
         }
 
@@ -143,10 +173,18 @@ int ConfigHandler::config_read(std::unique_ptr<BridgeHandler>& bridge){
             if(0 != ret){
                 return ret;
             }
-        } else {
+        } else if(TAG_UDPC == mavlink_activate) {
             com_uart_udp_type = COM_UDPC;
             bridge = std::make_unique<UdpcHandler>();
             ret = bridge->init(com_udprs_addr, com_udprs_port);
+            if(0 != ret){
+                return ret;
+            }
+        } else {
+            com_uart_udp_type = COM_SPLIT;
+            bridge = std::make_unique<SplitterHandler>();
+            bridge->set(splitter_camera_clcok_hz, splitter_camera_frame_hz, splitter_camera_sync_num, splitter_camera_threshold);
+            ret = bridge->init(com_splitter_addr, com_splitter_port_s);
             if(0 != ret){
                 return ret;
             }

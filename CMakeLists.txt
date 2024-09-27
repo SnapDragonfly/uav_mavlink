@@ -156,16 +156,20 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(${PROJECT_NAME}_mavlink 
-	src/uav_mavlink/main.cpp 
-	src/uav_mavlink/message.cpp 
-	src/uav_mavlink/config.cpp 
-	src/uav_mavlink/connect.cpp 
-	src/uav_mavlink/uart.cpp 
-	src/uav_mavlink/udpc.cpp 
-	src/uav_mavlink/udps.cpp 
-	src/uav_mavlink/bridge.cpp)
+  src/utils/rtp_head.cpp
+  src/utils/time_sync.cpp
+  src/uav_mavlink/message.cpp
+  src/uav_mavlink/config.cpp
+  src/uav_mavlink/connect.cpp
+  src/uav_mavlink/splitter.cpp
+  src/uav_mavlink/uart.cpp
+  src/uav_mavlink/udpc.cpp
+  src/uav_mavlink/udps.cpp
+  src/uav_mavlink/bridge.cpp
+  src/uav_mavlink/main.cpp)
 
-add_executable(${PROJECT_NAME}_camera src/uav_camera/uav_camera.cpp)
+add_executable(${PROJECT_NAME}_camera 
+  src/uav_camera/uav_camera.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the

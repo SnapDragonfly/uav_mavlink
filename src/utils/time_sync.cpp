@@ -135,28 +135,31 @@ double estimate_time(SyncSystem *sys, double count) {
     return estimated_time.tv_sec * 1000000.0 + estimated_time.tv_usec;
 }
 
-
-#if 0
-// Function to calculate error between the estimated time and actual system time
-double calculate_error(SyncSystem *sys, double count) {
-    struct timeval current_time;
-    gettimeofday(&current_time, NULL); // Get the current system time
-
-    // Estimate the system time for the given count
-    double estimated_time = estimate_time(sys, count);
-
-    // If estimation failed
-    if (estimated_time < 0) {
-        return -1;
+// Function to calculate the count based on the current system time
+unsigned int calculate_timestamp(SyncSystem *sys) {
+    if (sys->sample_count == 0) {
+        return 0; // No sync data available, return 0 for unsigned int
     }
 
-    // Get the actual current time in microseconds since epoch
-    double actual_time = current_time.tv_sec * 1000000.0 + current_time.tv_usec;
+    // Use the most recent sync data for the reverse calculation
+    int recent_index = (sys->sync_index - 1 + MAX_SAMPLES) % MAX_SAMPLES;
+    struct timeval sync_time = sys->sync_times[recent_index];
+    double sync_count = sys->sync_counts[recent_index];
 
-    // Calculate and return the error (difference between actual and estimated time)
-    return actual_time - estimated_time;
+    // Get the current system time
+    struct timeval current_time;
+    gettimeofday(&current_time, NULL);
+
+    // Calculate time difference (in microseconds) between the current time and sync_time
+    double time_diff = (current_time.tv_sec - sync_time.tv_sec) * 1000000.0 + (current_time.tv_usec - sync_time.tv_usec);
+
+    // Convert time difference back to count difference using the clock frequency (convert from µs to clock cycles)
+    double count_diff = (time_diff / 1000000.0) * sys->clock_hz;
+
+    // Calculate the estimated count and cast to unsigned int
+    return (unsigned int)(sync_count + count_diff);
 }
-#else
+
 // Function to calculate error between the estimated time and actual system time
 double calculate_error(SyncSystem *sys, double count) {
     struct timeval current_time;
@@ -197,4 +200,3 @@ double calculate_error(SyncSystem *sys, double count) {
 
     return percentage;
 }
-#endif

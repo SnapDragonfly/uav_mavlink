@@ -53,6 +53,8 @@ int SplitterHandler::init(std::string path, int param) {
     return 0;
 }
 
+#define TIMING_STATUS(A, B)  ((A <= B)?"OK":"NG")
+
 int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, std::unique_ptr<BridgeHandler>& bridge) {
 
     if (!(pfds.revents & POLLIN)) {
@@ -77,33 +79,51 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
     // Validate RTP header
     if (validate_rtp_first(&rtp, recv_len)) {
         static unsigned int packet_count = 0;
+        static unsigned int packet_error = 0;
         static unsigned int update_count = camera_frame_hz/2;
         static unsigned int check_skip = 0;
+        static double previous_error = 100;
+        static double latest_error   = 100;
+        double error;
 
-        if (packet_count % camera_sync_num == 0){
+        if (packet_count == 0){
             synchronize_time(&sys, rtp.timestamp);
             check_skip = 1;
+            printf("%u sync first\n", rtp.sequence);
+        } else if (packet_count % camera_sync_num == 0) {
+            error = calculate_error(&sys, rtp.timestamp);
+            if (abs(error) > camera_threshold && latest_error > previous_error){
+                synchronize_time(&sys, rtp.timestamp);
+                check_skip = 1;
+                printf("%u sync error %.2f %.2f %.2f\n", rtp.sequence, error, previous_error, latest_error);
+            }else{
+                printf("%u skip sync %.2f %.2f %.2f\n", rtp.sequence, error, previous_error, latest_error);
+            }
         }
         packet_count++;
         update_count++;
 
+        unsigned int calculated_timestamp = calculate_timestamp(&sys);
+        if(rtp.timestamp > calculated_timestamp){
+            packet_error++;
+        }
+
         if (update_count % camera_frame_hz == 0){
             if (check_skip == 0){
-                // Estimate system time for the latest count
                 double estimated_time = estimate_time(&sys, rtp.timestamp);
-                //printf("Estimated time for count %u: %.2f µs actually %.2f µs\n", rtp.timestamp, estimated_time, get_system_time_us());
-                double percentage = calculate_error(&sys, rtp.timestamp);
-
-                if (percentage < 0 || percentage > camera_threshold){
-                    printf("sync time %.2f %.2f\n", percentage, camera_threshold);
-                    synchronize_time(&sys, rtp.timestamp);
-                    check_skip = 1;
-                } 
-            }else{
+                double system_time    = get_system_time_us();
+                // Estimate system time for the latest count
+                printf("%u time %s %.2f vs %.2f µs\n", 
+                        rtp.sequence, TIMING_STATUS(estimated_time, system_time), estimated_time, system_time);
+                printf("%u stmp %s %u vs %u counts\n", 
+                        rtp.sequence, TIMING_STATUS(rtp.timestamp, calculated_timestamp), rtp.timestamp, calculated_timestamp);
+                previous_error = latest_error;
+                latest_error = 100.0*packet_error/packet_count;
+                printf("%u erro %.2f %% - %d\n", rtp.sequence, latest_error, packet_count);
+            }else{ 
                 check_skip = 0;
             }
         }
-        //timestamp = rtp.timestamp;
         //print_rtp_header(&rtp);
     }
 

@@ -48,6 +48,9 @@ double smooth_time(SyncSystem *sys);
 // Function to estimate system time based on count and clock frequency
 double estimate_time(SyncSystem *sys, double count);
 
+// Function to calculate the count based on the current system time
+unsigned int calculate_timestamp(SyncSystem *sys);
+
 // Function to calculate error statistics (mean error)
 double calculate_error(SyncSystem *sys, double count);
 

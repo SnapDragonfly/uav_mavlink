@@ -27,10 +27,10 @@ uav_com:
     port-s: 5400
     port: 5600
     addr: "127.0.0.1"
-    clock: 90800
-    sync: 5000
+    clock: 95000
+    sync: 50
     frame: 60
-    threshold: 5
+    threshold: 10
 
 # Section 4: IPC links between VINS Mono/Fusion, ego-planner and uav_mavlink
 # "ipc1" --> for att_pos_mocap/vision_speed_estimate 

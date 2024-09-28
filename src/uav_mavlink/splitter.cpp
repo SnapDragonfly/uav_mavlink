@@ -5,10 +5,10 @@
 #include "rtp_head.h"
 
 SplitterHandler::SplitterHandler() {
-    camera_clcok_hz  = 90000;
-    camera_frame_hz  = 30;
-    camera_sync_num  = 100;
-    camera_threshold = 5;
+    camera_param.camera_clock_hz = 90000;
+    camera_param.camera_frame_hz = 30;
+    camera_param.camera_sync_num = 100;
+    camera_param.camera_threshold = 5;
 
 #if (MAVLINK_CODE_DEBUG)
     ROS_INFO("SplitterHandler empty applied!");
@@ -47,7 +47,7 @@ int SplitterHandler::init(std::string path, int param) {
         return 5;
     }
 
-    init_sync_system(&sys, camera_clcok_hz); // Initialize with a clock frequency of 90*1000 Hz
+    init_sync_system(&sys, camera_param.camera_clock_hz); // Initialize with a clock frequency of 90*1000 Hz
 
     ROS_INFO("SplitterHandler ip: %s, port: %d", "127.0.0.1", param);
 
@@ -81,7 +81,7 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
     if (validate_rtp_first(&rtp, recv_len)) {
         static unsigned int packet_count = 0;
         static unsigned int packet_error = 0;
-        static unsigned int update_count = camera_frame_hz/2;
+        static unsigned int update_count = camera_param.camera_frame_hz/2;
         static unsigned int check_skip = 0;
         static double previous_error = 100;
         static double latest_error   = 100;
@@ -91,13 +91,13 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
             synchronize_time(&sys, rtp.timestamp);
             check_skip = 1;
             printf("%u sync first\n", rtp.sequence);
-        } else if (packet_count % camera_sync_num == 0) {
+        } else if (packet_count % camera_param.camera_sync_num == 0) {
             error = calculate_error(&sys, rtp.timestamp);
 
             bool status1, status2, status_trend;
             status_trend = latest_error > previous_error;  // and error's trend is getting large
 
-            status1   = abs(error) > camera_threshold && status_trend;      // abs() > error threshold
+            status1   = abs(error) > camera_param.camera_threshold && status_trend;      // abs() > error threshold
             status2   = error < 0 && status_trend;                          // error < 0
 
             if ( status1 || status2 ){
@@ -121,7 +121,7 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
             printf("%u good timestamp: %u vs %u\n", rtp.sequence, rtp.timestamp, calculated_timestamp);
         }
 
-        if (update_count % camera_frame_hz == 0){
+        if (update_count % camera_param.camera_frame_hz == 0){
             if (check_skip == 0){
                 double estimated_time = estimate_time(&sys, rtp.timestamp);
                 double system_time    = get_system_time_us();

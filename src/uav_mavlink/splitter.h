@@ -15,6 +15,13 @@
 #include "message.h"
 #include "time_sync.h"
 
+struct SplitterParam {
+    int camera_clock_hz;    // Camera clock frequency in Hz
+    int camera_frame_hz;    // Camera frame rate in Hz
+    int camera_sync_num;    // Number of camera syncs
+    float camera_threshold; // Threshold value for the camera
+};
+
 class SplitterHandler : public BridgeHandler {
 public:
     // Constructor and Destructor
@@ -28,11 +35,11 @@ public:
     int send(unsigned char* buf, int& len);
     int deinit() override;
 
-    virtual void set(int clock, int frame, int sync, int threshold){
-        camera_clcok_hz  = clock;
-        camera_frame_hz  = frame;
-        camera_sync_num  = sync;
-        camera_threshold = threshold;
+    virtual void set(void* param){
+        camera_param.camera_clock_hz  = ((struct SplitterParam*)param)->camera_clock_hz;
+        camera_param.camera_frame_hz  = ((struct SplitterParam*)param)->camera_frame_hz;
+        camera_param.camera_sync_num  = ((struct SplitterParam*)param)->camera_sync_num;
+        camera_param.camera_threshold = ((struct SplitterParam*)param)->camera_threshold;
     }
 
 private:
@@ -40,10 +47,8 @@ private:
     struct sockaddr_in udp_addr;
     socklen_t udp_len;
 
-    int camera_clcok_hz;
-    int camera_frame_hz;
-    int camera_sync_num;
-    float camera_threshold;
+    struct SplitterParam camera_param;
+
     SyncSystem sys;
 };
 

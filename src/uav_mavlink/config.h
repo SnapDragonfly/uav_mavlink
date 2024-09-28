@@ -60,7 +60,7 @@ public:
     int com_splitter_port_s;
     int com_splitter_port;
     std::string com_splitter_addr;
-    int splitter_camera_clcok_hz;
+    int splitter_camera_clock_hz;
     int splitter_camera_frame_hz;
     int splitter_camera_sync_num;
     float splitter_camera_threshold;

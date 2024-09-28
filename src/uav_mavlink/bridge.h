@@ -19,7 +19,7 @@ public:
     virtual int deinit() = 0;
 
     // Common methods
-    virtual void set(int clock, int frame, int sync, int threshold){
+    virtual void set(void* param){
         //do nothing
     }
     int get(){

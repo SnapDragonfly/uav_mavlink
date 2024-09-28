@@ -59,7 +59,7 @@ ConfigHandler::ConfigHandler(){
     ipc1_path         = MAVLINK_DEFAULT_IPC_PATH1;
     ipc2_path         = MAVLINK_DEFAULT_IPC_PATH2;
     imu_topic         = MAVLINK_DEFAULT_IMU_TOPIC;
-    splitter_camera_clcok_hz  = SPLITTER_CAMERA_CLOCK_HZ;
+    splitter_camera_clock_hz  = SPLITTER_CAMERA_CLOCK_HZ;
     splitter_camera_frame_hz  = SPLITTER_CAMERA_FRAME_HZ;
     splitter_camera_sync_num  = SPLITTER_CAMERA_SYNC_NUM;
     splitter_camera_threshold = SPLITTER_CAMERA_THRESHOLD;
@@ -82,7 +82,7 @@ void ConfigHandler::config_print(std::string title){
     ROS_INFO(" splitter%s: %s", IS_ACTIVE(COM_SPLIT, com_uart_udp_type), com_splitter_addr.c_str());
     ROS_INFO("     port%s: %d", IS_ACTIVE(COM_SPLIT, com_uart_udp_type), com_splitter_port);
     ROS_INFO("   port-s%s: %d", IS_ACTIVE(COM_SPLIT, com_uart_udp_type), com_splitter_port_s);
-    ROS_INFO("    clock%s: %d", IS_ACTIVE(COM_SPLIT, com_uart_udp_type), splitter_camera_clcok_hz);
+    ROS_INFO("    clock%s: %d", IS_ACTIVE(COM_SPLIT, com_uart_udp_type), splitter_camera_clock_hz);
     ROS_INFO("    frame%s: %d", IS_ACTIVE(COM_SPLIT, com_uart_udp_type), splitter_camera_frame_hz);
     ROS_INFO("     sync%s: %d", IS_ACTIVE(COM_SPLIT, com_uart_udp_type), splitter_camera_sync_num);
     ROS_INFO("threshold%s: %.3f", IS_ACTIVE(COM_SPLIT, com_uart_udp_type), splitter_camera_threshold);
@@ -136,7 +136,7 @@ int ConfigHandler::config_read(std::unique_ptr<BridgeHandler>& bridge){
                 com_splitter_port_s = uav_com[i][TAG_PORT_S].as<int>();
                 com_splitter_port   = uav_com[i][TAG_PORT].as<int>();
                 com_splitter_addr   = uav_com[i][TAG_ADDR].as<std::string>();
-                splitter_camera_clcok_hz  = uav_com[i][TAG_CLOCK].as<int>();
+                splitter_camera_clock_hz  = uav_com[i][TAG_CLOCK].as<int>();
                 splitter_camera_frame_hz  = uav_com[i][TAG_FRAME_HZ].as<int>();
                 splitter_camera_sync_num  = uav_com[i][TAG_SYNC_NUM].as<int>();
                 splitter_camera_threshold = uav_com[i][TAG_THRESHOLD].as<float>();
@@ -183,7 +183,13 @@ int ConfigHandler::config_read(std::unique_ptr<BridgeHandler>& bridge){
         } else {
             com_uart_udp_type = COM_SPLIT;
             bridge = std::make_unique<SplitterHandler>();
-            bridge->set(splitter_camera_clcok_hz, splitter_camera_frame_hz, splitter_camera_sync_num, splitter_camera_threshold);
+
+            struct SplitterParam param;
+            param.camera_clock_hz  = splitter_camera_clock_hz;
+            param.camera_frame_hz  = splitter_camera_frame_hz;
+            param.camera_sync_num  = splitter_camera_sync_num;
+            param.camera_threshold = splitter_camera_threshold;
+            bridge->set(&param);
             ret = bridge->init(com_splitter_addr, com_splitter_port_s);
             if(0 != ret){
                 return ret;

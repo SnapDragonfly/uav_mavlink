@@ -4,7 +4,9 @@
 
 UdpcHandler::UdpcHandler() {
 #if (MAVLINK_CODE_DEBUG)
-    ROS_INFO("UdpcHandler empty applied!");
+    if (debug()){
+        ROS_DEBUG("UdpcHandler empty applied!");
+    }
 #endif
 }
 

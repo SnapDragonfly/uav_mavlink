@@ -110,6 +110,7 @@ int ConfigHandler::config_read(std::unique_ptr<BridgeHandler>& bridge){
         // Load the YAML file
         YAML::Node config = YAML::LoadFile(config_path.c_str());
 
+        debug_enable = config[TAG_UAV_DEBUG].as<bool>();
         mavlink_rate = config[TAG_UAV_RATE].as<float>();
         imu_topic = config[TAG_UAV_IMU].as<std::string>();
         
@@ -162,6 +163,11 @@ int ConfigHandler::config_read(std::unique_ptr<BridgeHandler>& bridge){
         if (TAG_UART == mavlink_activate) {
             com_uart_udp_type = COM_UART;
             bridge = std::make_unique<UartHandler>();
+
+            struct UartParam param;
+            param.debug = debug_enable;
+            bridge->set(&param);
+
             ret = bridge->init(com_uart_path, com_uart_baud);
             if(0 != ret){
                 return ret;
@@ -169,6 +175,11 @@ int ConfigHandler::config_read(std::unique_ptr<BridgeHandler>& bridge){
         } else if(TAG_UDPS == mavlink_activate) {
             com_uart_udp_type = COM_UDPS;
             bridge = std::make_unique<UdpsHandler>();
+
+            struct UdpsParam param;
+            param.debug = debug_enable;
+            bridge->set(&param);
+
             ret = bridge->init("", com_udpls_port);
             if(0 != ret){
                 return ret;
@@ -176,6 +187,11 @@ int ConfigHandler::config_read(std::unique_ptr<BridgeHandler>& bridge){
         } else if(TAG_UDPC == mavlink_activate) {
             com_uart_udp_type = COM_UDPC;
             bridge = std::make_unique<UdpcHandler>();
+
+            struct UdpcParam param;
+            param.debug = debug_enable;
+            bridge->set(&param);
+
             ret = bridge->init(com_udprs_addr, com_udprs_port);
             if(0 != ret){
                 return ret;
@@ -189,14 +205,14 @@ int ConfigHandler::config_read(std::unique_ptr<BridgeHandler>& bridge){
             param.camera_frame_hz  = splitter_camera_frame_hz;
             param.camera_sync_num  = splitter_camera_sync_num;
             param.camera_threshold = splitter_camera_threshold;
+            param.debug = debug_enable;
             bridge->set(&param);
+
             ret = bridge->init(com_splitter_addr, com_splitter_port_s);
             if(0 != ret){
                 return ret;
             }
         }
-        
-        debug_enable = config[TAG_UAV_DEBUG].as<bool>();
     }
     catch (const std::runtime_error& e) {
         ROS_ERROR("Runtime error: %s", e.what());

@@ -4,13 +4,11 @@
 
 UdpsHandler::UdpsHandler() {
 #if (MAVLINK_CODE_DEBUG)
-    ROS_INFO("UdpsHandler empty applied!");
+    if (debug()){
+        ROS_DEBUG("UdpsHandler empty applied!");
+    }
 #endif
 }
-
-//UdpsHandler::UdpsHandler(std::unique_ptr<BridgeHandler> ptr) : BridgeHandler(std::move(ptr)) {
-//    ROS_INFO("UdpsHandler bridge applied!");
-//}
 
 UdpsHandler::~UdpsHandler() {
 }

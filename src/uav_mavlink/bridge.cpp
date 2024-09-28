@@ -3,6 +3,10 @@
 #include "bridge.h"
 
 BridgeHandler::BridgeHandler() {
-    //ROS_INFO("BridgeHandler empty applied!");
+#if (MAVLINK_CODE_DEBUG)
+    if (debug()){
+        ROS_DEBUG("BridgeHandler empty applied!");
+    }
+#endif
 }
 

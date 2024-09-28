@@ -11,13 +11,11 @@ SplitterHandler::SplitterHandler() {
     camera_param.camera_threshold = 5;
 
 #if (MAVLINK_CODE_DEBUG)
-    ROS_INFO("SplitterHandler empty applied!");
+    if (debug()){
+        ROS_DEBUG("SplitterHandler empty applied!");
+    }
 #endif
 }
-
-//SplitterHandler::SplitterHandler(std::unique_ptr<BridgeHandler> ptr) : BridgeHandler(std::move(ptr)) {
-//    ROS_INFO("SplitterHandler bridge applied!");
-//}
 
 SplitterHandler::~SplitterHandler() {
 }
@@ -64,18 +62,16 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
 
     udp_len = sizeof(udp_addr);
     int recv_len = recvfrom(fd, buf, RTP_DEFAULT_BUF_LEN, 0, (struct sockaddr *)&udp_addr, &udp_len);
-    //ROS_INFO("SplitterHandler buf: 0x%hhn, len: %d", buf, recv_len);
+
+#if (MAVLINK_CODE_DEBUG)
+    if (debug()){
+        ROS_DEBUG("SplitterHandler buf: 0x%hhn, len: %d", buf, recv_len);
+    }
+#endif
 
     // Parse RTP header
     struct rtp_header rtp;
     parse_rtp_header(buf, &rtp);
-
-#if 0
-    static unsigned int timestamp = 0;
-    if (timestamp != rtp.timestamp){
-        printf("timestamp mismatched!\n");
-    }
-#endif
 
     // Validate RTP header
     if (validate_rtp_first(&rtp, recv_len)) {
@@ -90,7 +86,12 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
         if (packet_count == 0){
             synchronize_time(&sys, rtp.timestamp);
             check_skip = 1;
-            printf("%u sync first\n", rtp.sequence);
+
+#if (MAVLINK_CODE_DEBUG)
+            if (debug()){
+                printf("%u sync first\n", rtp.sequence);
+            }
+#endif
         } else if (packet_count % camera_param.camera_sync_num == 0) {
             error = calculate_error(&sys, rtp.timestamp);
 
@@ -116,9 +117,15 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
             packet_error++;
             previous_error = latest_error;
             latest_error = 100.0*packet_error/packet_count;
-            printf("%u error timestamp: %u vs %u\n", rtp.sequence, rtp.timestamp, calculated_timestamp);
+#if (MAVLINK_CODE_DEBUG)
+            if (debug()){
+                printf("%u error timestamp: %u vs %u\n", rtp.sequence, rtp.timestamp, calculated_timestamp);
+            }
         }else{
-            printf("%u good timestamp: %u vs %u\n", rtp.sequence, rtp.timestamp, calculated_timestamp);
+            if (debug()){
+                printf("%u good timestamp: %u vs %u\n", rtp.sequence, rtp.timestamp, calculated_timestamp);
+            }
+#endif
         }
 
         if (update_count % camera_param.camera_frame_hz == 0){
@@ -140,7 +147,7 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
         //print_rtp_header(&rtp);
     }
 
-#if 0
+#if 0  // function to be implemented
     for (int i = 0; i < len; i++) {
         if (message->mavlink_parse(buf[i])){
             return message->mavlink_handler(bridge);

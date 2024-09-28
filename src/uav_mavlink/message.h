@@ -17,7 +17,7 @@
 class MessageHandler {
 public:
     // Constructor and Destructor
-    MessageHandler();
+    MessageHandler(bool debug);
     ~MessageHandler(){};
 
     // Public methods

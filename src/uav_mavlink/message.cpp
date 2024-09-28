@@ -4,7 +4,7 @@
 
 #include "message.h"
 
-MessageHandler::MessageHandler() {
+MessageHandler::MessageHandler(bool debug = false) {
     // Default values:
     mav_sysid       = 0;
     demo_stage      = 0;
@@ -27,14 +27,17 @@ MessageHandler::MessageHandler() {
 
     update_interval = 0;
 
-    debug_enable    = true;
+    debug_enable    = debug;
 }
 
 int MessageHandler::mavlink_init(ros::NodeHandle &ros_nh, std::string &imu_topic, float rate){
     imu_pub = ros_nh.advertise<sensor_msgs::Imu>(imu_topic.c_str(), 100);
     mavlink_rate = rate;
     update_interval = RATIO_SECOND_TO_MICRO_SECOND/mavlink_rate;
-    //ROS_INFO("mavlink topic: %s", imu_topic.c_str());
+
+#if (MAVLINK_CODE_DEBUG)
+    ROS_DEBUG("mavlink topic: %s", imu_topic.c_str());
+#endif
     return 0;
 }
 
@@ -44,7 +47,7 @@ int MessageHandler::mavlink_parse(char byte){
     if (msg.sysid == 255) return 0;
 
 #if (MAVLINK_CODE_DEBUG)
-    ROS_INFO("recv msg ID %d, seq %d", msg.msgid, msg.seq);
+    if(debug_enable) printf("recv msg ID %d, seq %d\n", msg.msgid, msg.seq);
 #endif /* MAVLINK_CODE_DEBUG */
 
     return 1;

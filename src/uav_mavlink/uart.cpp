@@ -7,7 +7,11 @@
 #include "uart.h"
 
 UartHandler::UartHandler() {
-    //ROS_INFO("UartHandler empty applied!");
+#if (MAVLINK_CODE_DEBUG)
+    if (debug()){
+        ROS_DEBUG("UartHandler empty applied!");
+    }
+#endif
 }
 
 //UartHandler::UartHandler(std::unique_ptr<BridgeHandler> ptr) : BridgeHandler(std::move(ptr)) {
@@ -89,8 +93,10 @@ int UartHandler::update(struct pollfd& pfds, class MessageHandler* message, std:
     }
 
 #if (MAVLINK_CODE_DEBUG)
-    printf("0x%02x ", byte);
-    fflush(stdout);
+    if(debug()){
+    	printf("0x%02x ", byte);
+    	fflush(stdout);
+    }
 #endif /* MAVLINK_CODE_DEBUG */
 
     if (message->mavlink_parse(byte)){

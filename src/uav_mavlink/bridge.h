@@ -22,6 +22,9 @@ public:
     virtual void set(void* param){
         //do nothing
     }
+    virtual bool debug(){
+        return false;
+    }
     int get(){
         return fd;
     }

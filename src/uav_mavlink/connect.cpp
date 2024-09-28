@@ -22,7 +22,6 @@
 #include "config.h"
 
 ConnectHandler::ConnectHandler(){
-    message = new MessageHandler();
     config  = new ConfigHandler();
 };
 
@@ -36,7 +35,7 @@ int ConnectHandler::init(ros::NodeHandle &ros_nh){
     if(0 != ret){
         ROS_WARN("Configure warning, using default values!");
     }
-
+    message = new MessageHandler(config->debug_enable);
     config->config_print("configuration");
 
     //imu_pub = ros_nh.advertise<sensor_msgs::Imu>(imu_topic.c_str(), 100);

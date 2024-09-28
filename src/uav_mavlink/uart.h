@@ -7,6 +7,10 @@
 #include "bridge.h"
 #include "message.h"
 
+struct UartParam {
+    bool debug;
+};
+
 class UartHandler : public BridgeHandler {
 public:
     // Constructor and Destructor
@@ -20,6 +24,15 @@ public:
     int send(unsigned char* buf, int& len);
     int deinit() override;
 
+    bool debug(){
+        return uart_param.debug;
+    }
+    void set(void* param){
+        uart_param.debug  = ((struct UartParam*)param)->debug;
+    }
+
+private:
+    struct UartParam uart_param;
 };
 
 #endif // UART_HANDLER_H

@@ -14,6 +14,10 @@
 #include "bridge.h"
 #include "message.h"
 
+struct UdpsParam {
+    bool debug;
+};
+
 class UdpsHandler : public BridgeHandler {
 public:
     // Constructor and Destructor
@@ -27,10 +31,19 @@ public:
     int send(unsigned char* buf, int& len);
     int deinit() override;
 
+    bool debug(){
+        return udps_param.debug;
+    }
+    void set(void* param){
+        udps_param.debug  = ((struct UdpsParam*)param)->debug;
+    }
+
 private:
     unsigned char buf[MAVLINK_DEFAULT_BUF_LEN];
     struct sockaddr_in udp_addr;
     socklen_t udp_len;
+
+    struct UdpsParam udps_param;
 };
 
 #endif // UDPS_HANDLER_H

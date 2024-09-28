@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
 
 #if (MAVLINK_CODE_DEBUG)
         if (connect.debug()){
-            ROS_INFO("%s: update ret=%d", NODE_NAME, ret);
+            ROS_DEBUG("%s: update ret=%d", NODE_NAME, ret);
         }
 #endif /* MAVLINK_CODE_DEBUG */
     }

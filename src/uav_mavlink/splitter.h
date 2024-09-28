@@ -20,6 +20,7 @@ struct SplitterParam {
     int camera_frame_hz;    // Camera frame rate in Hz
     int camera_sync_num;    // Number of camera syncs
     float camera_threshold; // Threshold value for the camera
+    bool debug;
 };
 
 class SplitterHandler : public BridgeHandler {
@@ -35,11 +36,15 @@ public:
     int send(unsigned char* buf, int& len);
     int deinit() override;
 
-    virtual void set(void* param){
+    bool debug(){
+        return camera_param.debug;
+    }
+    void set(void* param){
         camera_param.camera_clock_hz  = ((struct SplitterParam*)param)->camera_clock_hz;
         camera_param.camera_frame_hz  = ((struct SplitterParam*)param)->camera_frame_hz;
         camera_param.camera_sync_num  = ((struct SplitterParam*)param)->camera_sync_num;
         camera_param.camera_threshold = ((struct SplitterParam*)param)->camera_threshold;
+        camera_param.debug            = ((struct SplitterParam*)param)->debug;
     }
 
 private:

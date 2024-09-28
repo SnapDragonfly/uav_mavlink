@@ -5,9 +5,10 @@
 #include "rtp_head.h"
 
 SplitterHandler::SplitterHandler() {
-    camera_clcok_hz = 90000;
-    camera_frame_hz = 30;
-    camera_sync_num = 100;
+    camera_clcok_hz  = 90000;
+    camera_frame_hz  = 30;
+    camera_sync_num  = 100;
+    camera_threshold = 5;
 
 #if (MAVLINK_CODE_DEBUG)
     ROS_INFO("SplitterHandler empty applied!");
@@ -92,7 +93,14 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
             printf("%u sync first\n", rtp.sequence);
         } else if (packet_count % camera_sync_num == 0) {
             error = calculate_error(&sys, rtp.timestamp);
-            if (abs(error) > camera_threshold && latest_error > previous_error){
+
+            bool status1, status2, status_trend;
+            status_trend = latest_error > previous_error;  // and error's trend is getting large
+
+            status1   = abs(error) > camera_threshold && status_trend;      // abs() > error threshold
+            status2   = error < 0 && status_trend;                          // error < 0
+
+            if ( status1 || status2 ){
                 synchronize_time(&sys, rtp.timestamp);
                 check_skip = 1;
                 printf("%u sync error %.2f %.2f %.2f\n", rtp.sequence, error, previous_error, latest_error);
@@ -106,6 +114,11 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
         unsigned int calculated_timestamp = calculate_timestamp(&sys);
         if(rtp.timestamp > calculated_timestamp){
             packet_error++;
+            previous_error = latest_error;
+            latest_error = 100.0*packet_error/packet_count;
+            printf("%u error timestamp: %u vs %u\n", rtp.sequence, rtp.timestamp, calculated_timestamp);
+        }else{
+            printf("%u good timestamp: %u vs %u\n", rtp.sequence, rtp.timestamp, calculated_timestamp);
         }
 
         if (update_count % camera_frame_hz == 0){

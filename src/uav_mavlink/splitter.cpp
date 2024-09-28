@@ -10,6 +10,8 @@ SplitterHandler::SplitterHandler() {
     camera_param.camera_sync_num = 100;
     camera_param.camera_threshold = 5;
 
+    splitter_fd = 0;
+
 #if (MAVLINK_CODE_DEBUG)
     if (debug()){
         ROS_DEBUG("SplitterHandler empty applied!");
@@ -68,6 +70,10 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
         ROS_DEBUG("SplitterHandler buf: 0x%hhn, len: %d", buf, recv_len);
     }
 #endif
+
+    if(valid()){
+        forward(buf, recv_len);
+    }
 
     // Parse RTP header
     struct rtp_header rtp;
@@ -129,6 +135,10 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
         }
 
         if (update_count % camera_param.camera_frame_hz == 0){
+            if(!valid()){ //check RTP client
+                connect();
+            }
+
             if (check_skip == 0){
                 double estimated_time = estimate_time(&sys, rtp.timestamp);
                 double system_time    = get_system_time_us();
@@ -163,8 +173,45 @@ int SplitterHandler::send(unsigned char* buf, int& len){
     return len;
 }
 
+int SplitterHandler::connect() {
+    // Create a UDP socket
+    splitter_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (splitter_fd < 0) {
+        ROS_ERROR("Create socket failed.");
+        return 4;
+    }
+
+    memset(&(splitter_addr), 0, sizeof(splitter_addr));
+
+    // Server information
+    splitter_addr.sin_family = AF_INET;  // IPv4
+    //udp_addr.sin_addr.s_addr = inet_addr(path.c_str());  // remote IP
+    if (inet_pton(AF_INET, camera_param.splitter_addr.c_str(), &splitter_addr.sin_addr) <= 0) {
+        ROS_ERROR("Invalid address/ Address not supported");
+        return 5;
+    }
+    splitter_addr.sin_port = htons(camera_param.splitter_port);  // Port
+
+    const char *message = "Hello, Server!"; // just for link establish
+    (void)sendto(splitter_fd, message, strlen(message), 0, (struct sockaddr *) &splitter_addr, sizeof(splitter_addr));
+
+    ROS_INFO("SplitterHandler forward ip: %s, port: %d", camera_param.splitter_addr.c_str(), camera_param.splitter_port);
+
+    return 0;
+}
+
+int SplitterHandler::valid(){
+    return splitter_fd;
+}
+
+int SplitterHandler::forward(unsigned char* buf, int& len){
+    sendto(splitter_fd, buf, len, 0, (struct sockaddr *)&splitter_addr, sizeof(splitter_addr));
+    return len;
+}
+
 int SplitterHandler::deinit() {
     close(fd);
+    close(splitter_fd);
     return 0;
 }
 

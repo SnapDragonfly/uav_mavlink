@@ -205,10 +205,12 @@ int ConfigHandler::config_read(std::unique_ptr<BridgeHandler>& bridge){
             param.camera_frame_hz  = splitter_camera_frame_hz;
             param.camera_sync_num  = splitter_camera_sync_num;
             param.camera_threshold = splitter_camera_threshold;
-            param.debug = debug_enable;
+            param.splitter_port    = com_splitter_port;
+            param.splitter_addr    = com_splitter_addr;
+            param.debug            = debug_enable;
             bridge->set(&param);
 
-            ret = bridge->init(com_splitter_addr, com_splitter_port_s);
+            ret = bridge->init("", com_splitter_port_s);
             if(0 != ret){
                 return ret;
             }

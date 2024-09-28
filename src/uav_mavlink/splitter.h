@@ -20,6 +20,8 @@ struct SplitterParam {
     int camera_frame_hz;    // Camera frame rate in Hz
     int camera_sync_num;    // Number of camera syncs
     float camera_threshold; // Threshold value for the camera
+    int splitter_port;
+    std::string splitter_addr;
     bool debug;
 };
 
@@ -44,15 +46,26 @@ public:
         camera_param.camera_frame_hz  = ((struct SplitterParam*)param)->camera_frame_hz;
         camera_param.camera_sync_num  = ((struct SplitterParam*)param)->camera_sync_num;
         camera_param.camera_threshold = ((struct SplitterParam*)param)->camera_threshold;
+        camera_param.splitter_port    = ((struct SplitterParam*)param)->splitter_port;
+        camera_param.splitter_addr    = ((struct SplitterParam*)param)->splitter_addr;
         camera_param.debug            = ((struct SplitterParam*)param)->debug;
     }
 
 private:
+
+    int connect();
+    int valid();
+    int forward(unsigned char* buf, int& len);
+
     unsigned char buf[RTP_DEFAULT_BUF_LEN];
     struct sockaddr_in udp_addr;
     socklen_t udp_len;
 
     struct SplitterParam camera_param;
+
+    struct sockaddr_in splitter_addr;
+    socklen_t splitter_len;
+    int splitter_fd;
 
     SyncSystem sys;
 };

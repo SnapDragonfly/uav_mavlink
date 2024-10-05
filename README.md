@@ -4,6 +4,7 @@
 - [How to configure?](doc/how_to_config.md)
 - [How to run the program?](doc/how_to_run.md)
 - [Hardware diagram for uav mavlink](doc/hardware_diagram.md)
+- [Software diagram for uav mavlink](doc/software_diagram.md)
 
 # Design Goal
 
@@ -15,24 +16,13 @@ And it oriented to simplify configuration and handles different kind of interfac
 
 [![Watch uav_bridge rviz test](https://img.youtube.com/vi/ewxGkjimbnc/0.jpg)](https://youtu.be/ewxGkjimbnc)
 
-# Software Diagram
-
-```
-Ardupilot  <--UART/UDP --> uav_bridge_mavlink <--> ego Planner
-                                ^
-                                |
-                                v
-                         VINS Mono/Fusion
-                                ^
-                                |
-Camera  <-- CSI/RTP -->  uav_bridge_camera
-```
-
 # Features
 
 - [x] Support UART connection with Ardupilot
 - [x] Support UDP Client connection with Ardupilot
 - [x] Support UDP Server connection from Ardupilot
+- [x] Support RTP splitter from uav_mixer
+- [ ] Support loopback control to uav_mixer
 - [x] Support CSI/RTP video feed
 - [ ] IPC1???
 - [ ] IPC2???

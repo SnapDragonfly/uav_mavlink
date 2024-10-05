@@ -41,8 +41,9 @@ ipcs:
   - type: "ipc2"
     path: "/tmp/uav_server2"
 
-# Section 5: ROS topic for IMU data
+# Section 5: ROS topic for IMU data/IMG time
 uav_imu: "/tmp/uav_imu"
+uav_img: "/tmp/uav_img"
 
 # Section 6: debug
 debug: false

@@ -22,8 +22,28 @@ struct SplitterParam {
     float camera_threshold; // Threshold value for the camera
     int splitter_port;
     std::string splitter_addr;
+    std::string imu_topic;
+    std::string img_topic;
+    ros::NodeHandle ros_nh;
     bool debug;
 };
+
+struct ImuData{
+    uint32_t img_sec;  // Timestamp seconds
+    uint32_t img_nsec; // Timestamp nanoseconds
+    uint32_t imu_sec;  // Timestamp seconds
+    uint32_t imu_nsec; // Timestamp nanoseconds
+    float xacc;        // Linear acceleration X
+    float yacc;        // Linear acceleration Y
+    float zacc;        // Linear acceleration Z
+    float xgyro;       // Angular velocity X
+    float ygyro;       // Angular velocity Y
+    float zgyro;       // Angular velocity Z
+    float q_w;         // Quaternion W
+    float q_x;         // Quaternion X
+    float q_y;         // Quaternion Y
+    float q_z;         // Quaternion Z
+} ;
 
 class SplitterHandler : public BridgeHandler {
 public:
@@ -48,6 +68,9 @@ public:
         camera_param.camera_threshold = ((struct SplitterParam*)param)->camera_threshold;
         camera_param.splitter_port    = ((struct SplitterParam*)param)->splitter_port;
         camera_param.splitter_addr    = ((struct SplitterParam*)param)->splitter_addr;
+        camera_param.imu_topic        = ((struct SplitterParam*)param)->imu_topic;
+        camera_param.img_topic        = ((struct SplitterParam*)param)->img_topic;
+        camera_param.ros_nh           = ((struct SplitterParam*)param)->ros_nh;
         camera_param.debug            = ((struct SplitterParam*)param)->debug;
     }
 
@@ -62,6 +85,8 @@ private:
     socklen_t udp_len;
 
     struct SplitterParam camera_param;
+    ros::Publisher img_pub;
+    ros::Publisher imu_pub;
 
     struct sockaddr_in splitter_addr;
     socklen_t splitter_len;

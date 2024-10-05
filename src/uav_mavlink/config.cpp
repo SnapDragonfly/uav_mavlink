@@ -34,6 +34,7 @@
 
 #define TAG_UAV_COM      "uav_com"
 #define TAG_UAV_IMU      "uav_imu"
+#define TAG_UAV_IMG      "uav_img"
 #define TAG_UAV_ACTIVATE "mavlink_activate"
 #define TAG_UAV_RATE     "mavlink_rate"
 #define TAG_UAV_DEBUG    "debug"
@@ -59,6 +60,7 @@ ConfigHandler::ConfigHandler(){
     ipc1_path         = MAVLINK_DEFAULT_IPC_PATH1;
     ipc2_path         = MAVLINK_DEFAULT_IPC_PATH2;
     imu_topic         = MAVLINK_DEFAULT_IMU_TOPIC;
+    img_topic         = MAVLINK_DEFAULT_IMG_TOPIC;
     splitter_camera_clock_hz  = SPLITTER_CAMERA_CLOCK_HZ;
     splitter_camera_frame_hz  = SPLITTER_CAMERA_FRAME_HZ;
     splitter_camera_sync_num  = SPLITTER_CAMERA_SYNC_NUM;
@@ -91,13 +93,14 @@ void ConfigHandler::config_print(std::string title){
     ROS_INFO("ipc1: %s", ipc1_path.c_str());
     ROS_INFO("ipc2: %s", ipc2_path.c_str());
     ROS_INFO(" imu: %s", imu_topic.c_str());
+    ROS_INFO(" img: %s", img_topic.c_str());
 
     ROS_INFO("debug: %s", debug_enable?"true":"false");
 
     ROS_INFO("%s <-------------", title.c_str());
 }
 
-int ConfigHandler::config_read(std::unique_ptr<BridgeHandler>& bridge){
+int ConfigHandler::config_read(ros::NodeHandle& ros_nh, std::unique_ptr<BridgeHandler>& bridge){
     try {
         int ret;
         //config_print("debug");      
@@ -113,6 +116,7 @@ int ConfigHandler::config_read(std::unique_ptr<BridgeHandler>& bridge){
         debug_enable = config[TAG_UAV_DEBUG].as<bool>();
         mavlink_rate = config[TAG_UAV_RATE].as<float>();
         imu_topic = config[TAG_UAV_IMU].as<std::string>();
+        img_topic = config[TAG_UAV_IMG].as<std::string>();
         
         //ROS_INFO("%s: %s", TAG_UAV_ACTIVATE, mavlink_activate.c_str());
         //ROS_INFO("%s: %d", TAG_UAV_RATE, mavlink_rate);
@@ -207,6 +211,9 @@ int ConfigHandler::config_read(std::unique_ptr<BridgeHandler>& bridge){
             param.camera_threshold = splitter_camera_threshold;
             param.splitter_port    = com_splitter_port;
             param.splitter_addr    = com_splitter_addr;
+            param.imu_topic        = imu_topic;
+            param.img_topic        = img_topic;
+            param.ros_nh           = ros_nh;
             param.debug            = debug_enable;
             bridge->set(&param);
 

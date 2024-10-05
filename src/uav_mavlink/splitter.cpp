@@ -1,8 +1,11 @@
 
 #include <ros/ros.h>
+#include <sensor_msgs/Imu.h>
+#include <std_msgs/Header.h>
 
 #include "splitter.h"
 #include "rtp_head.h"
+#include "imu_mixer.h"
 
 SplitterHandler::SplitterHandler() {
     camera_param.camera_clock_hz = 90000;
@@ -48,6 +51,9 @@ int SplitterHandler::init(std::string path, int param) {
     }
 
     init_sync_system(&sys, camera_param.camera_clock_hz); // Initialize with a clock frequency of 90*1000 Hz
+    
+    img_pub = camera_param.ros_nh.advertise<std_msgs::Header>(camera_param.img_topic.c_str(), 100);
+    imu_pub = camera_param.ros_nh.advertise<sensor_msgs::Imu>(camera_param.imu_topic.c_str(), 100);
 
     ROS_INFO("SplitterHandler ip: %s, port: %d", "127.0.0.1", param);
 
@@ -64,6 +70,7 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
 
     udp_len = sizeof(udp_addr);
     int recv_len = recvfrom(fd, buf, RTP_DEFAULT_BUF_LEN, 0, (struct sockaddr *)&udp_addr, &udp_len);
+    int remaining_len = recv_len - FORWARD_RTP_PREFIX_LEN;
 
 #if (MAVLINK_CODE_DEBUG)
     if (debug()){
@@ -72,15 +79,59 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
 #endif
 
     if(valid()){
-        forward(buf, recv_len);
+        ImuData* p_imu_data = (ImuData*)buf;
+#if 0
+        //if(p_imu_data->img_sec == p_imu_data->imu_sec && p_imu_data->imu_nsec > p_imu_data->img_nsec) {
+            printf("img_sec: %u img_nsec: %u \n", p_imu_data->img_sec, p_imu_data->img_nsec);
+            printf("imu_sec: %u imu_nsec: %u \n", p_imu_data->imu_sec, p_imu_data->imu_nsec);
+        //}
+#endif
+
+        if (!(p_imu_data->img_sec == 0 && p_imu_data->imu_nsec ==0)) {
+
+            sensor_msgs::Imu imu_msg;
+            std_msgs::Header img_msg;
+
+            img_msg.stamp.sec  = p_imu_data->img_sec;
+            img_msg.stamp.nsec = p_imu_data->img_nsec;
+
+            img_pub.publish(img_msg);
+
+            imu_msg.header.frame_id = "world";
+
+            // Set the timestamp (from imu_sec and imu_nsec)
+            imu_msg.header.stamp.sec = p_imu_data->imu_sec;
+            imu_msg.header.stamp.nsec = p_imu_data->imu_nsec;
+            
+            // Set the linear acceleration
+            imu_msg.linear_acceleration.x = p_imu_data->xacc;
+            imu_msg.linear_acceleration.y = p_imu_data->yacc;
+            imu_msg.linear_acceleration.z = p_imu_data->zacc;
+
+            // Set the angular velocity
+            imu_msg.angular_velocity.x = p_imu_data->xgyro;
+            imu_msg.angular_velocity.y = p_imu_data->ygyro;
+            imu_msg.angular_velocity.z = p_imu_data->zgyro;
+
+            // Set the orientation as quaternion
+            imu_msg.orientation.w = p_imu_data->q_w;
+            imu_msg.orientation.x = p_imu_data->q_x;
+            imu_msg.orientation.y = p_imu_data->q_y;
+            imu_msg.orientation.z = p_imu_data->q_z;
+
+            imu_pub.publish(imu_msg);
+        }
+
+        forward(RTP_BUFFER_ADDR(buf), remaining_len);
+
     }
 
     // Parse RTP header
     struct rtp_header rtp;
-    parse_rtp_header(buf, &rtp);
+    parse_rtp_header(RTP_BUFFER_ADDR(buf), &rtp);
 
     // Validate RTP header
-    if (validate_rtp_first(&rtp, recv_len)) {
+    if (validate_rtp_first(&rtp, remaining_len)) {
         static unsigned int packet_count = 0;
         static unsigned int packet_error = 0;
         static unsigned int update_count = camera_param.camera_frame_hz/2;

@@ -31,7 +31,7 @@ bool ConnectHandler::debug(){
 
 int ConnectHandler::init(ros::NodeHandle &ros_nh){
 
-    int ret = config->config_read(bridge);
+    int ret = config->config_read(ros_nh, bridge);
     if(0 != ret){
         ROS_WARN("Configure warning, using default values!");
     }

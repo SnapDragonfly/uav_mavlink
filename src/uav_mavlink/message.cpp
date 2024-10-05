@@ -32,11 +32,12 @@ MessageHandler::MessageHandler(bool debug = false) {
 
 int MessageHandler::mavlink_init(ros::NodeHandle &ros_nh, std::string &imu_topic, float rate){
     imu_pub = ros_nh.advertise<sensor_msgs::Imu>(imu_topic.c_str(), 100);
+    
     mavlink_rate = rate;
     update_interval = RATIO_SECOND_TO_MICRO_SECOND/mavlink_rate;
 
 #if (MAVLINK_CODE_DEBUG)
-    ROS_DEBUG("mavlink topic: %s", imu_topic.c_str());
+    ROS_DEBUG("imu topic: %s", imu_topic.c_str());
 #endif
     return 0;
 }

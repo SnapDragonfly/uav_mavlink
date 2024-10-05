@@ -1,6 +1,7 @@
 
 #ifndef CONFIG_HANDLER_H
 #define CONFIG_HANDLER_H
+#include <ros/ros.h>
 
 #include <memory>
 
@@ -20,6 +21,7 @@
 #define MAVLINK_DEFAULT_IPC_PATH1       "/tmp/uav_bridge/ipc_server"
 #define MAVLINK_DEFAULT_IPC_PATH2       "/tmp/uav_bridge/ipc_server2"
 #define MAVLINK_DEFAULT_IMU_TOPIC       "/tmp/uav_bridge/imu"
+#define MAVLINK_DEFAULT_IMG_TOPIC       "/tmp/uav_bridge/img"
 #define SPLITTER_CAMERA_CLOCK_HZ        90000
 #define SPLITTER_CAMERA_FRAME_HZ        60
 #define SPLITTER_CAMERA_SYNC_NUM        5000
@@ -33,7 +35,7 @@ public:
     };
 
     // Public methods
-    int config_read(std::unique_ptr<BridgeHandler>& bridge);
+    int config_read(ros::NodeHandle& ros_nh, std::unique_ptr<BridgeHandler>& bridge);
     void config_print(std::string title);
 
 public:
@@ -72,6 +74,7 @@ public:
     std::string ipc1_path;
     std::string ipc2_path;
     std::string imu_topic;
+    std::string img_topic;
 
     bool debug_enable;
 };

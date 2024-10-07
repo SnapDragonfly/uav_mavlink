@@ -63,6 +63,8 @@ int SplitterHandler::init(std::string path, int param) {
 #define TIMING_STATUS(A, B)  ((A <= B)?"OK":"NG")
 
 int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, std::unique_ptr<BridgeHandler>& bridge) {
+    static uint32_t image_time_count = 0;
+    static uint32_t imu_data_count   = 0;
 
     if (!(pfds.revents & POLLIN)) {
         return 1;
@@ -75,13 +77,13 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
 
     if (MAGIC_IMU_FRAME_NUM == p_mix_head->reserved ) {
 #if (MAVLINK_CODE_DEBUG)
-        printf("FF sec: %u nsec: %u num: %u\n", p_mix_head->img_sec, p_mix_head->img_nsec, p_mix_head->imu_num);
+        printf("FF sec: %u nsec: %u num: %u\n", p_mix_head->img_sec, p_mix_head->img_nsec, p_mix_head->img_num);
 #endif
 
         imu_data_t* p_imu_data = (imu_data_t*)(buf + sizeof(mix_head_t));
         for (int i = 0; i < p_mix_head->imu_num; i++) {
 #if (MAVLINK_CODE_DEBUG)
-            printf("im sec: %u nsec: %u -- %d\n", p_imu_data->imu_sec, p_imu_data->imu_nsec, i+1);
+            printf("%02d sec: %u nsec: %u\n", i+1, p_imu_data->imu_sec, p_imu_data->imu_nsec);
 #endif
             if (!(p_imu_data->imu_sec == 0 && p_imu_data->imu_nsec ==0)) {
 
@@ -90,8 +92,9 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
                 imu_msg.header.frame_id = "world";
 
                 // Set the timestamp (from imu_sec and imu_nsec)
-                imu_msg.header.stamp.sec = p_imu_data->imu_sec;
+                imu_msg.header.stamp.sec  = p_imu_data->imu_sec;
                 imu_msg.header.stamp.nsec = p_imu_data->imu_nsec;
+                imu_msg.header.seq        = imu_data_count;
                 
                 // Set the linear acceleration
                 imu_msg.linear_acceleration.x = p_imu_data->xacc;
@@ -110,6 +113,7 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
                 imu_msg.orientation.z = p_imu_data->q_z;
 
                 imu_pub.publish(imu_msg);
+                imu_data_count++;
             }
             p_imu_data++;
         }
@@ -119,7 +123,7 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
         int remaining_len = recv_len - head_len;
 
 #if (MAVLINK_CODE_DEBUG)
-        printf("00 sec: %u nsec: %u num: %u\n", p_mix_head->img_sec, p_mix_head->img_nsec, p_mix_head->imu_num);
+        printf("XX sec: %u nsec: %u num: %u\n", p_mix_head->img_sec, p_mix_head->img_nsec, p_mix_head->img_num);
 #endif
 
 #if (MAVLINK_CODE_DEBUG)
@@ -131,15 +135,21 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
         if(valid()){
             forward(buf + head_len, remaining_len);
 
-            std_msgs::Header img_msg;
-            img_msg.stamp.sec  = p_mix_head->img_sec;
-            img_msg.stamp.nsec = p_mix_head->img_nsec;
-            img_pub.publish(img_msg);
+            if (!(0 == p_mix_head->img_sec && 0 == p_mix_head->img_nsec)) {
+                std_msgs::Header img_msg;
+                img_msg.seq = image_time_count;
+                img_msg.stamp.sec  = p_mix_head->img_sec;
+                img_msg.stamp.nsec = p_mix_head->img_nsec;
+                img_pub.publish(img_msg);
+                image_time_count++;
+
+                //printf("seq(%u) sec: %u nsec: %u\n", img_msg.seq, p_mix_head->img_sec, p_mix_head->img_nsec);
+            }
 
             imu_data_t* p_imu_data = (imu_data_t*)(buf + sizeof(mix_head_t));
             for (int i = 0; i < p_mix_head->imu_num; i++) {
 #if (MAVLINK_CODE_DEBUG)
-                printf("im sec: %u nsec: %u -- %d\n", p_imu_data->imu_sec, p_imu_data->imu_nsec, i+1);
+                printf("%02d sec: %u nsec: %u\n", i+1, p_imu_data->imu_sec, p_imu_data->imu_nsec);
 #endif
                 if (!(p_imu_data->imu_sec == 0 && p_imu_data->imu_nsec ==0)) {
 
@@ -148,8 +158,9 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
                     imu_msg.header.frame_id = "world";
 
                     // Set the timestamp (from imu_sec and imu_nsec)
-                    imu_msg.header.stamp.sec = p_imu_data->imu_sec;
+                    imu_msg.header.stamp.sec  = p_imu_data->imu_sec;
                     imu_msg.header.stamp.nsec = p_imu_data->imu_nsec;
+                    imu_msg.header.seq        = imu_data_count;
                     
                     // Set the linear acceleration
                     imu_msg.linear_acceleration.x = p_imu_data->xacc;
@@ -168,6 +179,7 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
                     imu_msg.orientation.z = p_imu_data->q_z;
 
                     imu_pub.publish(imu_msg);
+                    imu_data_count++;
                 }
                 p_imu_data++;
             }

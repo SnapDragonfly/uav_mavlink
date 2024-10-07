@@ -8,6 +8,7 @@ img_source: "rtp://@:5600"
 
 # Section 3: ROS topic for IMU data
 img_topic: "/tmp/uav_cam0"
+tim_topic: "/tmp/uav_img"
 
 # Section 4: debug
 debug: true

@@ -6,6 +6,7 @@
 //#define CAMERA_CODE_DEBUG
 
 #define CAMERA_DEFAULT_IMAGE_TOPIC  "/tmp/uav_bridge/cam0/image_raw"
+#define CAMERA_DEFAULT_TIME_TOPIC   "/tmp/uav_bridge/cam0/time"
 #define CAMERA_DEFAULT_IMAGE_SOURCE "csi://0"
 
 #define CAMERA_ARGV_LEN           32

@@ -27,6 +27,7 @@
 
 #include "ros/ros.h"
 #include <ros/package.h>
+#include "std_msgs/Header.h"
 #include "sensor_msgs/Image.h"
 #include "cv_bridge/cv_bridge.h"
 #include "opencv2/opencv.hpp"
@@ -46,6 +47,7 @@
 #define TAG_IMG_LATENCY         "img_latency"
 #define TAG_IMG_SOURCE          "img_source"
 #define TAG_IMG_TOPIC           "img_topic"
+#define TAG_TIM_TOPIC           "tim_topic"
 #define TAG_IMG_DEBUG           "debug"
 
 bool signal_recieved   = false;
@@ -55,8 +57,11 @@ bool debug_enable      = true;
 int  img_latency       = 100;
 std::string img_source = CAMERA_DEFAULT_IMAGE_SOURCE;
 std::string img_topic  = CAMERA_DEFAULT_IMAGE_TOPIC;
+std::string tim_topic  = CAMERA_DEFAULT_TIME_TOPIC;
 char params[CAMERA_ARGC_LEN][CAMERA_ARGV_LEN];
 char* params_ptr[CAMERA_ARGC_LEN];
+ros::Time current_time = ros::Time(0);
+ros::Time last_time = ros::Time(0);
 
 void sig_handler(int signo)
 {
@@ -67,12 +72,24 @@ void sig_handler(int signo)
     }
 }
 
+void imgMsgCallback(const std_msgs::Header::ConstPtr& msg)
+{
+    if(msg->stamp > current_time) {
+        last_time = current_time;
+        current_time = msg->stamp;
+    }
+
+    //printf("Received img_msg:\n");
+    //printf("Stamp: %d.%d\n", img_time.sec, img_time.nsec);
+}
+
 void config_print(const char* title){
     printf("%s ------------->\n", title);
 
     printf("img latency: %d\n", img_latency);
     printf(" img source: %s\n",img_source.c_str());
     printf("  img topic: %s\n",img_topic.c_str());
+    printf(" time topic: %s\n",tim_topic.c_str());
 
     printf("debug: %s\n", debug_enable?"true":"false");
 
@@ -91,6 +108,7 @@ int config_read(int argc, char** argv){
 
         img_latency  = config[TAG_IMG_LATENCY].as<int>();
         img_topic    = config[TAG_IMG_TOPIC].as<std::string>();
+        tim_topic    = config[TAG_TIM_TOPIC].as<std::string>();
         img_source   = config[TAG_IMG_SOURCE].as<std::string>();
 
         debug_enable = config[TAG_IMG_DEBUG].as<bool>();
@@ -157,6 +175,7 @@ int main( int argc, char** argv )
 
 
     ros::Publisher image_pub = nh.advertise<sensor_msgs::Image>(img_topic.c_str(), 1);
+    ros::Subscriber image_sub = nh.subscribe(tim_topic.c_str(), 1, imgMsgCallback);
     /*
      * create input video stream
      */
@@ -240,7 +259,11 @@ int main( int argc, char** argv )
         // Convert frame to ROS image message
         cv::Mat cv_image(input->GetHeight(), input->GetWidth(), CV_8UC3, image);
         sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image).toImageMsg();
+#if 1
+        msg->header.stamp = last_time;
+#else
         msg->header.stamp = ros::Time::now() - ros::Duration(img_latency / 1000.0);
+#endif
         msg->header.frame_id = "world";
         msg->width = cv_image.cols;
         msg->height = cv_image.rows;

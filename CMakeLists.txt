@@ -245,3 +245,8 @@ target_link_libraries(${PROJECT_NAME}_camera
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
+
+catkin_install_python(PROGRAMS
+    scripts/time_difference.py
+    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)

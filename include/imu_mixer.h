@@ -4,6 +4,11 @@
 typedef struct {
     uint32_t img_sec;  // Timestamp seconds
     uint32_t img_nsec; // Timestamp nanoseconds
+    uint16_t reserved;
+    uint16_t imu_num;  // Number of IMU data followed
+} mix_head_t;
+
+typedef struct {
     uint32_t imu_sec;  // Timestamp seconds
     uint32_t imu_nsec; // Timestamp nanoseconds
     float xacc;        // Linear acceleration X
@@ -18,11 +23,12 @@ typedef struct {
     float q_z;         // Quaternion Z
 } imu_data_t;
 
-#define FORWARD_RTP_IMU_LEN      sizeof(imu_data_t)                 //uav_mixer settings, RPi3B+ ~56 Bytes
-#define FORWARD_RTP_IMU_NUM      1                                  //uav_mixer settings, RPi3B+ 1 for try
-#define FORWARD_RTP_PREFIX_LEN   (FORWARD_RTP_IMU_LEN*FORWARD_RTP_IMU_NUM)
+#define MAGIC_IMU_FRAME_NUM      0xFFFF
 
-#define RTP_BUFFER_ADDR(buffer) (buffer+FORWARD_RTP_PREFIX_LEN)
-#define RTP_BUFFER_SIZE(buffer) (sizeof(buffer)-FORWARD_RTP_PREFIX_LEN)
+#define FORWARD_RTP_IMU_NUM      10                  //uav_mixer settings, RPi3B+ 10 for try
+#define FORWARD_RTP_IMG_LEN      sizeof(mix_head_t)
+#define FORWARD_RTP_IMU_LEN      sizeof(imu_data_t)
+#define FORWARD_RTP_MIX_LEN      (FORWARD_RTP_IMG_LEN+ FORWARD_RTP_IMU_NUM*FORWARD_RTP_IMU_LEN)
+#define FORWARD_RTP_PREFIX_LEN   (FORWARD_RTP_IMU_LEN*FORWARD_RTP_IMU_NUM)
 
 #endif

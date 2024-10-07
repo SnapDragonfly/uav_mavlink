@@ -15,6 +15,8 @@
 #include "message.h"
 #include "time_sync.h"
 
+#define SPLITTER_TEST_FUNCTION      0
+
 struct SplitterParam {
     int camera_clock_hz;    // Camera clock frequency in Hz
     int camera_frame_hz;    // Camera frame rate in Hz
@@ -27,23 +29,6 @@ struct SplitterParam {
     ros::NodeHandle ros_nh;
     bool debug;
 };
-
-struct ImuData{
-    uint32_t img_sec;  // Timestamp seconds
-    uint32_t img_nsec; // Timestamp nanoseconds
-    uint32_t imu_sec;  // Timestamp seconds
-    uint32_t imu_nsec; // Timestamp nanoseconds
-    float xacc;        // Linear acceleration X
-    float yacc;        // Linear acceleration Y
-    float zacc;        // Linear acceleration Z
-    float xgyro;       // Angular velocity X
-    float ygyro;       // Angular velocity Y
-    float zgyro;       // Angular velocity Z
-    float q_w;         // Quaternion W
-    float q_x;         // Quaternion X
-    float q_y;         // Quaternion Y
-    float q_z;         // Quaternion Z
-} ;
 
 class SplitterHandler : public BridgeHandler {
 public:

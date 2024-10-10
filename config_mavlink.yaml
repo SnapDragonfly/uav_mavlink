@@ -29,7 +29,7 @@ uav_com:
     addr: "127.0.0.1"
     clock: 95000
     sync: 50
-    frame: 60
+    frame: 15
     threshold: 10
 
 # Section 4: IPC links between VINS Mono/Fusion, ego-planner and uav_mavlink

@@ -133,8 +133,6 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
 #endif
 
         if(valid()){
-            forward(buf + head_len, remaining_len);
-
             if (!(0 == p_mix_head->img_sec && 0 == p_mix_head->img_nsec)) {
                 std_msgs::Header img_msg;
                 img_msg.seq = image_time_count;
@@ -145,6 +143,8 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
 
                 //printf("seq(%u) sec: %u nsec: %u\n", img_msg.seq, p_mix_head->img_sec, p_mix_head->img_nsec);
             }
+            
+            forward(buf + head_len, remaining_len);
 
             imu_data_t* p_imu_data = (imu_data_t*)(buf + sizeof(mix_head_t));
             for (int i = 0; i < p_mix_head->imu_num; i++) {

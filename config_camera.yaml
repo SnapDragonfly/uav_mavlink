@@ -10,5 +10,7 @@ img_source: "rtp://@:5600"
 img_topic: "/tmp/uav_cam0"
 tim_topic: "/tmp/uav_img"
 
+uav_imu: "/tmp/uav_imu"
+
 # Section 4: debug
-debug: true
+debug: false

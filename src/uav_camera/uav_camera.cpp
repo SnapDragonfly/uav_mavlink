@@ -44,18 +44,18 @@
 
 #include "config.h"
 
-#define TAG_IMG_LATENCY         "img_latency"
 #define TAG_IMG_SOURCE          "img_source"
 #define TAG_IMG_TOPIC           "img_topic"
+#define TAG_UAV_IMU             "imu_topic"
 #define TAG_TIM_TOPIC           "tim_topic"
-#define TAG_IMG_DEBUG           "debug"
-#define TAG_UAV_IMU             "uav_imu"
+#define TAG_IMG_DEBUG           "enable_debug"
+#define TAG_UDP_SPLIT           "enable_split"
 
 bool signal_recieved   = false;
 videoOutput* output    = NULL;
 
-bool debug_enable      = true;
-int  img_latency       = 100;
+bool enable_debug      = true;
+bool enable_split      = true;
 
 std::string img_source = CAMERA_DEFAULT_IMAGE_SOURCE;
 std::string img_topic  = CAMERA_DEFAULT_IMAGE_TOPIC;
@@ -64,19 +64,6 @@ std::string imu_topic  = MAVLINK_DEFAULT_IMU_TOPIC;
 
 char params[CAMERA_ARGC_LEN][CAMERA_ARGV_LEN];
 char* params_ptr[CAMERA_ARGC_LEN];
-
-ros::Time lastest_time    = ros::Time(0);
-ros::Time previous_time   = ros::Time(0);
-ros::Time local_sys_time  = ros::Time(0);
-ros::Time imu_sys_time    = ros::Time(0);
-
-std::deque<ros::Time> time_queue;
-const size_t MAX_QUEUE_SIZE = 10;
-
-int popup_state = 0;
-uint32_t popup_count = 0;
-uint32_t no_popup_count = 0;
-uint32_t max_no_popup_count = 1;
 
 void sig_handler(int signo)
 {
@@ -88,48 +75,83 @@ void sig_handler(int signo)
 }
 
 std::mutex img_time_mutex;
+ros::Time img_lastest_time    = ros::Time(0);
+ros::Time img_previous_time   = ros::Time(0);
+ros::Time img_local_time      = ros::Time(0);
+
+std::deque<std_msgs::Header> time_queue;
+const size_t MAX_QUEUE_SIZE = 120;
 
 void imgMsgCallback(const std_msgs::Header::ConstPtr& msg)
 {
     std::lock_guard<std::mutex> lock(img_time_mutex);
 
-    if(time_queue.empty() || local_sys_time != time_queue.back()) {
-        if (popup_count < 5) {
-            popup_count++;
+    // Check if the queue already contains an entry with the same seq
+    for (const auto& header : time_queue) {
+        if (header.seq == msg->seq) {
+            // If we have the same seq, we can skip adding to the queue
+            return;
         }
-        previous_time  = lastest_time;
-        lastest_time   = msg->stamp;
-        local_sys_time = ros::Time::now();
-        time_queue.push_back(lastest_time);
+    }
+
+    img_previous_time = img_lastest_time;     // Store the previous timestamp
+    img_lastest_time  = msg->stamp;           // Update the latest timestamp
+    img_local_time    = ros::Time::now();     // Get the current system time
+
+    // Add the new header to the queue
+    time_queue.push_back(*msg);
+
+    // If the queue exceeds the maximum size, remove the oldest entry
+    if (time_queue.size() > MAX_QUEUE_SIZE) {
+        time_queue.pop_front();
     }
 }
 
+std_msgs::Header popupHeaderBySeq(uint32_t seq)
+{
+    std::lock_guard<std::mutex> lock(img_time_mutex);
+
+    // If seq is 0, return the oldest header
+    if (seq == 0 && !time_queue.empty()) {
+        std_msgs::Header header = time_queue.front(); // Get the oldest header
+        time_queue.pop_front(); // Remove the oldest header from the queue
+        return header; // Return the popped header
+    }
+
+    // Otherwise, search for the header by seq
+    for (auto it = time_queue.begin(); it != time_queue.end(); ++it) {
+        if (it->seq == seq) {
+            std_msgs::Header header = *it; // Store the header to return it
+            time_queue.erase(it);          // Remove the header from the queue
+            return header;                 // Return the popped header
+        }
+    }
+
+    // Return an empty header if the seq is not found
+    return std_msgs::Header();
+}
+
 std::mutex imu_time_mutex;
+ros::Time imu_latest_time    = ros::Time(0);
 
 void imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg)
 {
     std::lock_guard<std::mutex> lock(imu_time_mutex);
-    imu_sys_time = imu_msg->header.stamp;
+    imu_latest_time = imu_msg->header.stamp;
 }
 
 void config_print(const char* title){
     printf("%s ------------->\n", title);
 
-    printf("img latency: %d\n", img_latency);
     printf(" img source: %s\n",img_source.c_str());
     printf("  img topic: %s\n",img_topic.c_str());
     printf("  imu topic: %s\n",imu_topic.c_str());
     printf(" time topic: %s\n",tim_topic.c_str());
 
-    printf("debug: %s\n", debug_enable?"true":"false");
+    printf("split: %s\n", enable_split?"true":"false");
+    printf("debug: %s\n", enable_debug?"true":"false");
 
     printf("%s <-------------\n", title);
-}
-
-void camera_print() {
-    printf(" --------------\n");
-    printf("Max no popup count: %u\n", max_no_popup_count);
-    printf(" --------------\n");
 }
 
 int config_read(int argc, char** argv){
@@ -142,15 +164,17 @@ int config_read(int argc, char** argv){
         // Load the YAML file
         YAML::Node config = YAML::LoadFile(config_path.c_str());
 
-        img_latency  = config[TAG_IMG_LATENCY].as<int>();
+        img_source   = config[TAG_IMG_SOURCE].as<std::string>();
         img_topic    = config[TAG_IMG_TOPIC].as<std::string>();
         imu_topic    = config[TAG_UAV_IMU].as<std::string>();
         tim_topic    = config[TAG_TIM_TOPIC].as<std::string>();
-        img_source   = config[TAG_IMG_SOURCE].as<std::string>();
 
-        debug_enable = config[TAG_IMG_DEBUG].as<bool>();
+        enable_split = config[TAG_UDP_SPLIT].as<bool>();
+        enable_debug = config[TAG_IMG_DEBUG].as<bool>();
+
 
         config_print("set"); 
+
         // Assign argc/argv
         memset(params[0], 0, CAMERA_ARGV_LEN);
         strncpy(params[0], argv[0], CAMERA_ARGV_LEN - 1);
@@ -191,6 +215,11 @@ int usage()
     return 0;
 }
 
+bool isHeaderEmpty(const std_msgs::Header& header)
+{
+    return (header.seq == 0 && header.stamp.isZero() && header.frame_id.empty());
+}
+
 int main( int argc, char** argv )
 {
     // Initialize ROS
@@ -210,10 +239,11 @@ int main( int argc, char** argv )
     if( signal(SIGINT, sig_handler) == SIG_ERR )
         LogError("can't catch SIGINT\n");
 
-
     ros::Publisher image_pub = nh.advertise<sensor_msgs::Image>(img_topic.c_str(), 1);
-    ros::Subscriber image_sub = nh.subscribe(tim_topic.c_str(), 1, imgMsgCallback);
-    ros::Subscriber imu_sub = nh.subscribe(imu_topic.c_str(), 1, imuCallback);
+    if (enable_split) {
+        ros::Subscriber image_sub = nh.subscribe(tim_topic.c_str(), 1, imgMsgCallback);
+        ros::Subscriber imu_sub = nh.subscribe(imu_topic.c_str(), 1, imuCallback);
+    }
     /*
      * create input video stream
      */
@@ -225,8 +255,7 @@ int main( int argc, char** argv )
         return 0;
     }
 
-
-    if(debug_enable){
+    if(enable_debug){
         /*
         * create output video stream
         */
@@ -239,7 +268,6 @@ int main( int argc, char** argv )
         }
     }
     
-
     /*
      * capture/display loop
      */
@@ -262,7 +290,7 @@ int main( int argc, char** argv )
         
         numFrames++;
         
-        if(debug_enable){
+        if (enable_debug) {
             if( output != NULL )
             {
                 output->Render(image, input->GetWidth(), input->GetHeight());
@@ -278,165 +306,54 @@ int main( int argc, char** argv )
             }
         }
 
+        // Convert frame to ROS image message
+        if (enable_split) {
+            cv::Mat cv_image(input->GetHeight(), input->GetWidth(), CV_8UC3, image);
+            sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image).toImageMsg();
 #if 0
-        // Convert frame to ROS image message
-        cv::Mat cv_image(input->GetHeight(), input->GetWidth(), CV_8UC3, image);
-        sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image).toImageMsg();
-        msg->header.stamp = ros::Time::now();
-        msg->header.frame_id = "camera_link";
-        msg->width = input->GetWidth();
-        msg->height = input->GetHeight();
-        msg->encoding = "bgr8";
-        msg->is_bigendian = 0;
-        if (msg->data.size() != msg->width * msg->height * 3) {
-            ROS_ERROR("Image data size mismatch: expected %d, got %ld", msg->width * msg->height * 3, msg->data.size());
-        }
-        image_pub.publish(msg);
-
-        rate.sleep();
+            msg->header.stamp = ros::Time::now();
 #else
-        // Convert frame to ROS image message
-        cv::Mat cv_image(input->GetHeight(), input->GetWidth(), CV_8UC3, image);
-        sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image).toImageMsg();
-#if 1
-        ros::Duration time_diff;
-        { // image time mark
-            std::lock_guard<std::mutex> lock(img_time_mutex);
-
-            static ros::Duration min_popup_time_diff;
-            static ros::Duration max_popup_time_diff;
-            static ros::Time lastest_nopopup_time;
-
-            if (!time_queue.empty()) { //popup
-                no_popup_count = 1;
-                switch(popup_state) {
-                    case 0: //not initialized
-                        msg->header.stamp = time_queue.front();
-                        time_queue.pop_front();
-
-                        lastest_nopopup_time = ros::Time(0);
-                        max_popup_time_diff  = ros::Duration(0);
-                        min_popup_time_diff  = ros::Duration(1e9);  // 1 billion seconds or another suitably large value
-
-                        if (popup_count > 2) {
-                            popup_state = 1;
-                        }
-                        break;
-                    
-                    case 1: //previously popup
-                        msg->header.stamp = time_queue.front();
-                        time_queue.pop_front();
-
-                        time_diff = msg->header.stamp - previous_time;
-                        if (time_diff < min_popup_time_diff) {
-                            min_popup_time_diff = time_diff;
-                        }
-
-                        if (time_diff > max_popup_time_diff) {
-                            max_popup_time_diff = time_diff;
-                        }
-                        break;
-
-                    case 2: //previously no popup
-                        msg->header.stamp = time_queue.front();
-                        time_queue.pop_front();
-
-                        popup_state = 1;
-                        break;
-
-                    default: //can't be here
-                        break;
-                }
-                //ROS_INFO("popup time: %d.%d.%ld", msg->header.stamp.sec, msg->header.stamp.nsec, time_queue.size());
-        } else { //no popup
-                no_popup_count++;
-                if (no_popup_count > max_no_popup_count) {
-                    max_no_popup_count = no_popup_count;
-                }
-                switch(popup_state) {
-                    case 0: //not initialized
-                        msg->header.stamp = ros::Time(0);
-                        lastest_nopopup_time = msg->header.stamp;
-
-                        popup_count = 0;
-                        break;
-                    
-                    case 1: //previously popup
-
-#if 1
-                        msg->header.stamp = lastest_time + max_popup_time_diff * (1.0 / max_no_popup_count);
-#else
-                        time_diff = ros::Time::now() - local_sys_time;
-                        if (time_diff > max_popup_time_diff) {
-                            msg->header.stamp = lastest_time + min_popup_time_diff;
-                        } else {
-                            msg->header.stamp = lastest_time + time_diff;
-                        }
-#endif
-                        lastest_nopopup_time = msg->header.stamp;
-
-                        popup_state = 2;
-                        if (popup_count < 2){
-                            popup_count = 0;
-                        }
-                        break;
-
-                    case 2: //previously no popup
-#if 1
-                        msg->header.stamp = lastest_nopopup_time + max_popup_time_diff * (1.0 / max_no_popup_count);
-#else
-                        time_diff = ros::Time::now() - lastest_nopopup_time;
-                        if (time_diff > max_popup_time_diff) {
-                            msg->header.stamp = lastest_nopopup_time + min_popup_time_diff;
-                        } else {
-                            msg->header.stamp = lastest_nopopup_time + time_diff;
-                        }
-#endif
-                        lastest_nopopup_time = msg->header.stamp;
-
-                        if (popup_count < 2){
-                            popup_count = 0;
-                        }
-                        break;
-
-                    default: //can't be here
-                        break;
-                }
-                //ROS_INFO("nopop time: %d.%d.%ld", msg->header.stamp.sec, msg->header.stamp.nsec, time_queue.size());
-            }  
-        } 
-#else
-        //msg->header.stamp = ros::Time::now() - ros::Duration(img_latency / 1000.0);
-        msg->header.stamp = ros::Time::now();
-#endif
-        msg->header.frame_id = "world";
-        msg->width = cv_image.cols;
-        msg->height = cv_image.rows;
-        msg->encoding = "bgr8";
-        msg->is_bigendian = 0;
-        msg->step = msg->width * 3;
-
-        // Check if the size of the image data matches the expected size
-        if (msg->data.size() != msg->height * msg->step) {
-            ROS_ERROR("Image data size mismatch: expected %d, got %ld", msg->height * msg->step, msg->data.size());
-        }
-
-        { // frame validation compared with imu timeline
-            static uint64_t last_frame_timestamp = 0;
-            uint64_t curr_frame_timestamp = input->GetLastTimestamp();
-
-            std::lock_guard<std::mutex> lock(imu_time_mutex);
-            time_diff = imu_sys_time - msg->header.stamp;
-            if (curr_frame_timestamp >  last_frame_timestamp  
-                && time_diff < ros::Duration(0.1) 
-                && time_diff > ros::Duration(0.0)) {
-                image_pub.publish(msg);
-                last_frame_timestamp = curr_frame_timestamp;
+            std_msgs::Header img_msg = popupHeaderBySeq(0);
+            if (isHeaderEmpty(img_msg)) {
+                msg->header.stamp = img_lastest_time;
             } else {
-                ROS_WARN("frame dropped curr %ld last %ld diff %f sec", curr_frame_timestamp, last_frame_timestamp, time_diff.toSec());
+                msg->header.stamp = img_msg.stamp;
             }
-        }
+
+            if (msg->header.stamp > imu_latest_time) {
+                ROS_ERROR("img(%d.%d) comes after imu(%d.%d)", 
+                           img_msg.stamp.sec, img_msg.stamp.nsec, imu_latest_time.sec, imu_latest_time.nsec);
+            }
 #endif
+            msg->header.frame_id = "world";
+            msg->width = cv_image.cols;
+            msg->height = cv_image.rows;
+            msg->encoding = "bgr8";
+            msg->is_bigendian = 0;
+            msg->step = msg->width * 3;
+
+            // Check if the size of the image data matches the expected size
+            if (msg->data.size() != msg->height * msg->step) {
+                ROS_ERROR("Image data size mismatch: expected %d, got %ld", msg->height * msg->step, msg->data.size());
+            }
+
+            image_pub.publish(msg);
+
+        } else {
+            cv::Mat cv_image(input->GetHeight(), input->GetWidth(), CV_8UC3, image);
+            sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", cv_image).toImageMsg();
+            msg->header.stamp = ros::Time::now();
+            msg->header.frame_id = "camera_link";
+            msg->width = input->GetWidth();
+            msg->height = input->GetHeight();
+            msg->encoding = "bgr8";
+            msg->is_bigendian = 0;
+            if (msg->data.size() != msg->width * msg->height * 3) {
+                ROS_ERROR("Image data size mismatch: expected %d, got %ld", msg->width * msg->height * 3, msg->data.size());
+            }
+            image_pub.publish(msg);
+        }
+
         ros::spinOnce(); // Handle ROS callbacks
     }
 
@@ -445,12 +362,10 @@ int main( int argc, char** argv )
      * destroy resources
      */
     printf("video-viewer:  shutting down...\n");
-
-    camera_print();
     
     SAFE_DELETE(input);
 
-    if(debug_enable){
+    if(enable_debug){
         SAFE_DELETE(output);
     }
 

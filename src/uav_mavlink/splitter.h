@@ -15,7 +15,17 @@
 #include "message.h"
 #include "time_sync.h"
 
-#define SPLITTER_TEST_FUNCTION      0
+typedef struct {
+    uint8_t cc : 4;          // CSRC count (4 bits)
+    uint8_t extension : 1;   // Extension flag (1 bit)
+    uint8_t padding : 1;     // Padding flag (1 bit)
+    uint8_t version : 2;     // RTP version (2 bits)
+    uint8_t payload_type : 7; // Payload type (7 bits)
+    uint8_t marker : 1;      // Marker bit (1 bit)
+    uint16_t sequence_number; // Sequence number (16 bits)
+    uint32_t timestamp;      // Timestamp (32 bits)
+    uint32_t ssrc;           // SSRC identifier (32 bits)
+} rtp_header_t;
 
 struct SplitterParam {
     int camera_clock_hz;    // Camera clock frequency in Hz
@@ -63,6 +73,7 @@ private:
 
     int connect();
     int valid();
+    bool is_valid_rtp_packet(const uint8_t *data, size_t length);
     int forward(unsigned char* buf, int& len);
 
     unsigned char buf[RTP_DEFAULT_BUF_LEN];

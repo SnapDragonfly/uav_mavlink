@@ -60,6 +60,47 @@ int SplitterHandler::init(std::string path, int param) {
     return 0;
 }
 
+bool SplitterHandler::is_valid_rtp_packet(const uint8_t *data, size_t length) {
+    if (length < sizeof(rtp_header_t)) {
+        return false; // Packet too short to be a valid RTP packet
+    }
+
+    const rtp_header_t *header = (const rtp_header_t *)data;
+
+    // Check RTP version (should be 2)
+    if ((header->version & 0x03) != 2) { // Only the last 2 bits for version
+        return false; // Invalid RTP version
+    }
+
+    // Check for valid payload type (0-127 are standard types)
+    if (header->payload_type > 127) {
+        return false; // Invalid payload type
+    }
+
+    // Check if padding is set
+    if (header->padding) {
+        // Ensure there are enough bytes for the RTP header + padding length
+        if (length < sizeof(rtp_header_t)) {
+            return false; // Not enough data for the header
+        }
+        // The padding length is determined by the last byte of the packet
+        uint8_t padding_length = data[length - 1]; // Last byte for padding length
+        if (length < sizeof(rtp_header_t) + padding_length) {
+            return false; // Not enough data for padding
+        }
+    }
+
+    // Check the CSRC count and ensure it does not exceed the packet length
+    size_t csrc_count = header->cc;
+    if (length < sizeof(rtp_header_t) + (csrc_count * sizeof(uint32_t))) {
+        return false; // Packet too short for CSRC identifiers
+    }
+
+    // Additional checks can be added here (e.g., for sequence number, timestamp)
+
+    return true; // Valid RTP packet
+}
+
 #define TIMING_STATUS(A, B)  ((A <= B)?"OK":"NG")
 
 int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, std::unique_ptr<BridgeHandler>& bridge) {
@@ -72,12 +113,21 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
 
     udp_len = sizeof(udp_addr);
     int recv_len = recvfrom(fd, buf, RTP_DEFAULT_BUF_LEN, 0, (struct sockaddr *)&udp_addr, &udp_len);
-
+    if (recv_len < 0) {
+        return 2;
+    }
     mix_head_t* p_mix_head = (mix_head_t*)buf;
 
     if (MAGIC_IMU_FRAME_NUM == p_mix_head->reserved ) {
+
+        /*
+         * Procedure A: IMU data
+         *
+         * IDLE UPD time for IMU, handling imu sensor data
+         * Please try to empty imu ring buffer
+         */
 #if (MAVLINK_CODE_DEBUG)
-        printf("FF sec: %u nsec: %u num: %u\n", p_mix_head->img_sec, p_mix_head->img_nsec, p_mix_head->img_num);
+        printf("FF sec: %u nsec: %u num: %u\n", p_mix_head->img_sec, p_mix_head->img_nsec, p_mix_head->imu_num);
 #endif
 
         imu_data_t* p_imu_data = (imu_data_t*)(buf + sizeof(mix_head_t));
@@ -123,7 +173,7 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
         int remaining_len = recv_len - head_len;
 
 #if (MAVLINK_CODE_DEBUG)
-        printf("XX sec: %u nsec: %u num: %u\n", p_mix_head->img_sec, p_mix_head->img_nsec, p_mix_head->img_num);
+        printf("XX sec: %u nsec: %u num: %u\n", p_mix_head->img_sec, p_mix_head->img_nsec, p_mix_head->imu_num);
 #endif
 
 #if (MAVLINK_CODE_DEBUG)
@@ -133,143 +183,116 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
 #endif
 
         if(valid()){
-            if (!(0 == p_mix_head->img_sec && 0 == p_mix_head->img_nsec)) {
-                std_msgs::Header img_msg;
-                img_msg.seq = image_time_count;
-                img_msg.stamp.sec  = p_mix_head->img_sec;
-                img_msg.stamp.nsec = p_mix_head->img_nsec;
-                img_pub.publish(img_msg);
-                image_time_count++;
 
-                //printf("seq(%u) sec: %u nsec: %u\n", img_msg.seq, p_mix_head->img_sec, p_mix_head->img_nsec);
-            }
-            
-            forward(buf + head_len, remaining_len);
+            bool valid = is_valid_rtp_packet((const uint8_t *)buf + head_len, remaining_len);
+            if (valid) {
 
-            imu_data_t* p_imu_data = (imu_data_t*)(buf + sizeof(mix_head_t));
-            for (int i = 0; i < p_mix_head->imu_num; i++) {
-#if (MAVLINK_CODE_DEBUG)
-                printf("%02d sec: %u nsec: %u\n", i+1, p_imu_data->imu_sec, p_imu_data->imu_nsec);
-#endif
-                if (!(p_imu_data->imu_sec == 0 && p_imu_data->imu_nsec ==0)) {
+                /*
+                * Procedure B: IMU + IMG data
+                *
+                * Handle IMU data, ahead of real RTP packet
+                */
+                if (!(0 == p_mix_head->timestamp.img_sec && 0 == p_mix_head->timestamp.img_nsec)) {
+                    std_msgs::Header img_msg;
+                    img_msg.seq        = p_mix_head->timestamp.img_timestamp;
+                    img_msg.stamp.sec  = p_mix_head->timestamp.img_sec;
+                    img_msg.stamp.nsec = p_mix_head->timestamp.img_nsec;
+                    img_pub.publish(img_msg);
+                    image_time_count++;
 
-                    sensor_msgs::Imu imu_msg;
- 
-                    imu_msg.header.frame_id = "world";
-
-                    // Set the timestamp (from imu_sec and imu_nsec)
-                    imu_msg.header.stamp.sec  = p_imu_data->imu_sec;
-                    imu_msg.header.stamp.nsec = p_imu_data->imu_nsec;
-                    imu_msg.header.seq        = imu_data_count;
-                    
-                    // Set the linear acceleration
-                    imu_msg.linear_acceleration.x = p_imu_data->xacc;
-                    imu_msg.linear_acceleration.y = p_imu_data->yacc;
-                    imu_msg.linear_acceleration.z = p_imu_data->zacc;
-
-                    // Set the angular velocity
-                    imu_msg.angular_velocity.x = p_imu_data->xgyro;
-                    imu_msg.angular_velocity.y = p_imu_data->ygyro;
-                    imu_msg.angular_velocity.z = p_imu_data->zgyro;
-
-                    // Set the orientation as quaternion
-                    imu_msg.orientation.w = p_imu_data->q_w;
-                    imu_msg.orientation.x = p_imu_data->q_x;
-                    imu_msg.orientation.y = p_imu_data->q_y;
-                    imu_msg.orientation.z = p_imu_data->q_z;
-
-                    imu_pub.publish(imu_msg);
-                    imu_data_count++;
+                    //printf("seq(%u) sec: %u nsec: %u\n", img_msg.seq, p_mix_head->img_sec, p_mix_head->img_nsec);
                 }
-                p_imu_data++;
+                
+                forward(buf + head_len, remaining_len);
+
+                imu_data_t* p_imu_data = (imu_data_t*)(buf + sizeof(mix_head_t));
+                for (int i = 0; i < p_mix_head->imu_num; i++) {
+#if (MAVLINK_CODE_DEBUG)
+                    printf("%02d sec: %u nsec: %u\n", i+1, p_imu_data->imu_sec, p_imu_data->imu_nsec);
+#endif
+                    if (!(p_imu_data->imu_sec == 0 && p_imu_data->imu_nsec ==0)) {
+
+                        sensor_msgs::Imu imu_msg;
+    
+                        imu_msg.header.frame_id = "world";
+
+                        // Set the timestamp (from imu_sec and imu_nsec)
+                        imu_msg.header.stamp.sec  = p_imu_data->imu_sec;
+                        imu_msg.header.stamp.nsec = p_imu_data->imu_nsec;
+                        imu_msg.header.seq        = imu_data_count;
+                        
+                        // Set the linear acceleration
+                        imu_msg.linear_acceleration.x = p_imu_data->xacc;
+                        imu_msg.linear_acceleration.y = p_imu_data->yacc;
+                        imu_msg.linear_acceleration.z = p_imu_data->zacc;
+
+                        // Set the angular velocity
+                        imu_msg.angular_velocity.x = p_imu_data->xgyro;
+                        imu_msg.angular_velocity.y = p_imu_data->ygyro;
+                        imu_msg.angular_velocity.z = p_imu_data->zgyro;
+
+                        // Set the orientation as quaternion
+                        imu_msg.orientation.w = p_imu_data->q_w;
+                        imu_msg.orientation.x = p_imu_data->q_x;
+                        imu_msg.orientation.y = p_imu_data->q_y;
+                        imu_msg.orientation.z = p_imu_data->q_z;
+
+                        imu_pub.publish(imu_msg);
+                        imu_data_count++;
+                    }
+                    p_imu_data++;
+                }
+            } else {
+
+                /*
+                * Procedure C: IMU data
+                *
+                * Not a valid RTP packet, handling IMU data if necessary
+                */
+                forward(buf + head_len, remaining_len);
+
+                imu_data_t* p_imu_data = (imu_data_t*)(buf + sizeof(mix_head_t));
+                for (int i = 0; i < p_mix_head->imu_num; i++) {
+#if (MAVLINK_CODE_DEBUG)
+                    printf("%02d sec: %u nsec: %u\n", i+1, p_imu_data->imu_sec, p_imu_data->imu_nsec);
+#endif
+                    if (!(p_imu_data->imu_sec == 0 && p_imu_data->imu_nsec == 0)) {
+
+                        sensor_msgs::Imu imu_msg;
+    
+                        imu_msg.header.frame_id = "world";
+
+                        // Set the timestamp (from imu_sec and imu_nsec)
+                        imu_msg.header.stamp.sec  = p_imu_data->imu_sec;
+                        imu_msg.header.stamp.nsec = p_imu_data->imu_nsec;
+                        imu_msg.header.seq        = imu_data_count;
+                        
+                        // Set the linear acceleration
+                        imu_msg.linear_acceleration.x = p_imu_data->xacc;
+                        imu_msg.linear_acceleration.y = p_imu_data->yacc;
+                        imu_msg.linear_acceleration.z = p_imu_data->zacc;
+
+                        // Set the angular velocity
+                        imu_msg.angular_velocity.x = p_imu_data->xgyro;
+                        imu_msg.angular_velocity.y = p_imu_data->ygyro;
+                        imu_msg.angular_velocity.z = p_imu_data->zgyro;
+
+                        // Set the orientation as quaternion
+                        imu_msg.orientation.w = p_imu_data->q_w;
+                        imu_msg.orientation.x = p_imu_data->q_x;
+                        imu_msg.orientation.y = p_imu_data->q_y;
+                        imu_msg.orientation.z = p_imu_data->q_z;
+
+                        imu_pub.publish(imu_msg);
+                        imu_data_count++;
+                    }
+                    p_imu_data++;
+                }
             }
         } else {
             connect();
+
         }
-
-#if (SPLITTER_TEST_FUNCTION)
-        // Parse RTP header
-        struct rtp_header rtp;
-        parse_rtp_header(RTP_BUFFER_ADDR(buf), &rtp);
-
-        // Validate RTP header
-        if (validate_rtp_first(&rtp, remaining_len)) {
-            static unsigned int packet_count = 0;
-            static unsigned int packet_error = 0;
-            static unsigned int update_count = camera_param.camera_frame_hz/2;
-            static unsigned int check_skip = 0;
-            static double previous_error = 100;
-            static double latest_error   = 100;
-            double error;
-
-            if (packet_count == 0){
-                synchronize_time(&sys, rtp.timestamp);
-                check_skip = 1;
-
-#if (MAVLINK_CODE_DEBUG)
-                if (debug()){
-                    printf("%u sync first\n", rtp.sequence);
-                }
-#endif
-            } else if (packet_count % camera_param.camera_sync_num == 0) {
-                error = calculate_error(&sys, rtp.timestamp);
-
-                bool status1, status2, status_trend;
-                status_trend = latest_error > previous_error;  // and error's trend is getting large
-
-                status1   = abs(error) > camera_param.camera_threshold && status_trend;      // abs() > error threshold
-                status2   = error < 0 && status_trend;                          // error < 0
-
-                if ( status1 || status2 ){
-                    synchronize_time(&sys, rtp.timestamp);
-                    check_skip = 1;
-                    printf("%u sync error %.2f %.2f %.2f\n", rtp.sequence, error, previous_error, latest_error);
-                }else{
-                    printf("%u skip sync %.2f %.2f %.2f\n", rtp.sequence, error, previous_error, latest_error);
-                }
-            }
-            packet_count++;
-            update_count++;
-
-            unsigned int calculated_timestamp = calculate_timestamp(&sys);
-            if(rtp.timestamp > calculated_timestamp){
-                packet_error++;
-                previous_error = latest_error;
-                latest_error = 100.0*packet_error/packet_count;
-#if (MAVLINK_CODE_DEBUG)
-                if (debug()){
-                    printf("%u error timestamp: %u vs %u\n", rtp.sequence, rtp.timestamp, calculated_timestamp);
-                }
-            }else{
-                if (debug()){
-                    printf("%u good timestamp: %u vs %u\n", rtp.sequence, rtp.timestamp, calculated_timestamp);
-                }
-#endif
-            }
-
-            if (update_count % camera_param.camera_frame_hz == 0){
-                if(!valid()){ //check RTP client
-                    connect();
-                }
-
-                if (check_skip == 0){
-                    double estimated_time = estimate_time(&sys, rtp.timestamp);
-                    double system_time    = get_system_time_us();
-                    // Estimate system time for the latest count
-                    printf("%u time %s %.2f vs %.2f µs\n", 
-                            rtp.sequence, TIMING_STATUS(estimated_time, system_time), estimated_time, system_time);
-                    printf("%u stmp %s %u vs %u counts\n", 
-                            rtp.sequence, TIMING_STATUS(rtp.timestamp, calculated_timestamp), rtp.timestamp, calculated_timestamp);
-                    previous_error = latest_error;
-                    latest_error = 100.0*packet_error/packet_count;
-                    printf("%u erro %.2f %% - %d\n", rtp.sequence, latest_error, packet_count);
-                }else{ 
-                    check_skip = 0;
-                }
-            }
-            //print_rtp_header(&rtp);
-        }
-#endif /* SPLITTER_TEST_FUNCTION */
     }
 
     return 2;

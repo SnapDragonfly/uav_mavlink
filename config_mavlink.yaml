@@ -43,7 +43,7 @@ ipcs:
 
 # Section 5: ROS topic for IMU data/IMG time
 uav_imu: "/tmp/uav_imu"
-uav_img: "/tmp/uav_img"
+uav_img: "/tmp/uav_tim0"
 
 # Section 6: debug
 debug: false

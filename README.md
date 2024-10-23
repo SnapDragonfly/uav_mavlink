@@ -22,8 +22,10 @@ And it oriented to simplify configuration and handles different kind of interfac
 - [x] Support UDP Client connection with Ardupilot
 - [x] Support UDP Server connection from Ardupilot
 - [x] Support RTP splitter from uav_mixer
-- [ ] Support loopback control to uav_mixer
-- [x] Support CSI/RTP video feed
+- [x] Support Jetson Orin
+  - [x] CSI/RTP video feed (csi://0, rtp://@:1234, file://my_video.mp4)
+  - [x] decoder engine (cpu/omx/v4l2)
+  - [x] codec (h264/h265)
 - [ ] IPC1???
 - [ ] IPC2???
 

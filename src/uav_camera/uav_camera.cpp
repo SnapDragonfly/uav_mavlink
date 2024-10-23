@@ -44,23 +44,34 @@
 
 #include "config.h"
 
-#define TAG_IMG_SOURCE          "img_source"
-#define TAG_IMG_TOPIC           "img_topic"
-#define TAG_UAV_IMU             "imu_topic"
-#define TAG_TIM_TOPIC           "tim_topic"
+#define TAG_CAM_SOURCE          "cam_source"
+#define TAG_TYPE                "type"
+#define TAG_INPUT               "input"
+
+#define TAG_SOURCE              "source"
+#define TAG_DECODER             "decoder"
+#define TAG_CODEC               "codec"
+
+#define TAG_UAV_CAM             "cam"
+#define TAG_UAV_IMU             "imu"
+#define TAG_UAV_TIM             "tim"
+
 #define TAG_IMG_DEBUG           "enable_debug"
 #define TAG_UDP_SPLIT           "enable_split"
 
-bool signal_recieved   = false;
-videoOutput* output    = NULL;
+bool signal_recieved    = false;
+videoOutput* output     = NULL;
 
-bool enable_debug      = true;
-bool enable_split      = true;
+bool enable_debug       = true;
+bool enable_split       = true;
 
-std::string img_source = CAMERA_DEFAULT_IMAGE_SOURCE;
-std::string img_topic  = CAMERA_DEFAULT_IMAGE_TOPIC;
-std::string tim_topic  = CAMERA_DEFAULT_TIME_TOPIC;
-std::string imu_topic  = MAVLINK_DEFAULT_IMU_TOPIC;
+std::string img_source  = CAMERA_DEFAULT_IMAGE_SOURCE;
+std::string img_decoder = CAMERA_DEFAULT_IMAGE_DECODER;
+std::string img_codec   = CAMERA_DEFAULT_IMAGE_CODEC;
+
+std::string img_topic   = CAMERA_DEFAULT_IMAGE_TOPIC;
+std::string tim_topic   = CAMERA_DEFAULT_TIME_TOPIC;
+std::string imu_topic   = MAVLINK_DEFAULT_IMU_TOPIC;
 
 char params[CAMERA_ARGC_LEN][CAMERA_ARGV_LEN];
 char* params_ptr[CAMERA_ARGC_LEN];
@@ -144,6 +155,9 @@ void config_print(const char* title){
     printf("%s ------------->\n", title);
 
     printf(" img source: %s\n",img_source.c_str());
+    printf("img decoder: %s\n",img_decoder.c_str());
+    printf("  img codec: %s\n",img_codec.c_str());
+
     printf("  img topic: %s\n",img_topic.c_str());
     printf("  imu topic: %s\n",imu_topic.c_str());
     printf(" time topic: %s\n",tim_topic.c_str());
@@ -164,25 +178,46 @@ int config_read(int argc, char** argv){
         // Load the YAML file
         YAML::Node config = YAML::LoadFile(config_path.c_str());
 
-        img_source   = config[TAG_IMG_SOURCE].as<std::string>();
-        img_topic    = config[TAG_IMG_TOPIC].as<std::string>();
-        imu_topic    = config[TAG_UAV_IMU].as<std::string>();
-        tim_topic    = config[TAG_TIM_TOPIC].as<std::string>();
+        // Section 1: image latency from camera to uav_camera
 
+        // Section 2: camera source, csi://0 or rtp://@:5400
+        const YAML::Node &cam_src = config[TAG_CAM_SOURCE];
+        for (std::size_t i = 0; i < cam_src.size(); i++) {
+            std::string cam_type = cam_src[i][TAG_TYPE].as<std::string>();
+            if (cam_type == TAG_INPUT) {
+                img_source   = cam_src[i][TAG_SOURCE].as<std::string>();
+                img_decoder  = cam_src[i][TAG_DECODER].as<std::string>();
+                img_codec    = cam_src[i][TAG_CODEC].as<std::string>();
+            } else {
+                img_topic    = cam_src[i][TAG_UAV_CAM].as<std::string>();
+                imu_topic    = cam_src[i][TAG_UAV_IMU].as<std::string>();
+                tim_topic    = cam_src[i][TAG_UAV_TIM].as<std::string>();
+            }
+        }
+
+        // Section 3: enable splitter support
         enable_split = config[TAG_UDP_SPLIT].as<bool>();
-        enable_debug = config[TAG_IMG_DEBUG].as<bool>();
 
+        // Section 4: debug
+        enable_debug = config[TAG_IMG_DEBUG].as<bool>();
 
         config_print("set"); 
 
         // Assign argc/argv
         memset(params[0], 0, CAMERA_ARGV_LEN);
         strncpy(params[0], argv[0], CAMERA_ARGV_LEN - 1);
+
         memset(params[1], 0, CAMERA_ARGV_LEN);
         strncpy(params[1], img_source.c_str(), strlen(img_source.c_str()));
+        memset(params[2], 0, CAMERA_ARGV_LEN);
+        strncpy(params[2], img_decoder.c_str(), strlen(img_decoder.c_str()));
+        memset(params[3], 0, CAMERA_ARGV_LEN);
+        strncpy(params[3], img_codec.c_str(), strlen(img_codec.c_str()));
 
         params_ptr[0] = params[0];
         params_ptr[1] = params[1];
+        params_ptr[2] = params[2];
+        params_ptr[3] = params[3];
     }
     catch (const std::runtime_error& e) {
         ROS_ERROR("Runtime error: %s", e.what());

@@ -19,13 +19,13 @@ uav_com:
     path: "/dev/ttyUSB0"
     baud: 921600
   - type: "udps"
-    port-s: 14560
+    port-s: 14550
   - type: "udpc"
     port: 14550
     addr: "192.168.1.15"
   - type: "split"
-    port-s: 5400
-    port: 5600
+    port-s: 5600
+    port: 5700
     addr: "127.0.0.1"
     clock: 95000
     sync: 50
@@ -46,4 +46,4 @@ uav_imu: "/tmp/uav_imu"
 uav_img: "/tmp/uav_tim0"
 
 # Section 6: debug
-debug: false
+debug: true

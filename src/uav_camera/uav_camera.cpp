@@ -96,6 +96,7 @@ const size_t MAX_QUEUE_SIZE = 120;
 void imgMsgCallback(const std_msgs::Header::ConstPtr& msg)
 {
     std::lock_guard<std::mutex> lock(img_time_mutex);
+    //ROS_INFO("Received message on /tmp/uav_tim0");
 
     // Check if the queue already contains an entry with the same seq
     for (const auto& header : time_queue) {
@@ -145,10 +146,12 @@ std_msgs::Header popupHeaderBySeq(uint32_t seq)
 std::mutex imu_time_mutex;
 ros::Time imu_latest_time    = ros::Time(0);
 
-void imuCallback(const sensor_msgs::Imu::ConstPtr& imu_msg)
+void imuCallback(const sensor_msgs::Imu::ConstPtr& msg)
 {
     std::lock_guard<std::mutex> lock(imu_time_mutex);
-    imu_latest_time = imu_msg->header.stamp;
+    //ROS_INFO("Received message on /tmp/uav_imu");
+
+    imu_latest_time = msg->header.stamp;
 }
 
 void config_print(const char* title){
@@ -188,10 +191,10 @@ int config_read(int argc, char** argv){
                 img_source   = cam_src[i][TAG_SOURCE].as<std::string>();
                 img_decoder  = cam_src[i][TAG_DECODER].as<std::string>();
                 img_codec    = cam_src[i][TAG_CODEC].as<std::string>();
-            } else {
-                img_topic    = cam_src[i][TAG_UAV_CAM].as<std::string>();
                 imu_topic    = cam_src[i][TAG_UAV_IMU].as<std::string>();
                 tim_topic    = cam_src[i][TAG_UAV_TIM].as<std::string>();
+            } else {
+                img_topic    = cam_src[i][TAG_UAV_CAM].as<std::string>();
             }
         }
 
@@ -274,10 +277,15 @@ int main( int argc, char** argv )
     if( signal(SIGINT, sig_handler) == SIG_ERR )
         LogError("can't catch SIGINT\n");
 
-    ros::Publisher image_pub = nh.advertise<sensor_msgs::Image>(img_topic.c_str(), 1);
+    ros::Publisher  image_pub;
+    ros::Subscriber image_sub;
+    ros::Subscriber imu_sub;
+
+    image_pub = nh.advertise<sensor_msgs::Image>(img_topic.c_str(), 1);
     if (enable_split) {
-        ros::Subscriber image_sub = nh.subscribe(tim_topic.c_str(), 1, imgMsgCallback);
-        ros::Subscriber imu_sub = nh.subscribe(imu_topic.c_str(), 1, imuCallback);
+        image_sub = nh.subscribe(tim_topic.c_str(), 1, imgMsgCallback);
+        imu_sub = nh.subscribe(imu_topic.c_str(), 1, imuCallback);
+        LogVerbose("video-viewer:  enable_split %s %s\n", imu_topic.c_str(), tim_topic.c_str());
     }
     /*
      * create input video stream
@@ -355,7 +363,7 @@ int main( int argc, char** argv )
                 msg->header.stamp = img_msg.stamp;
             }
 
-            if (msg->header.stamp > imu_latest_time) {
+            if (msg->header.stamp > imu_latest_time || ros::Time(0) == imu_latest_time) {
                 ROS_ERROR("img(%d.%d) comes after imu(%d.%d)", 
                            img_msg.stamp.sec, img_msg.stamp.nsec, imu_latest_time.sec, imu_latest_time.nsec);
             }

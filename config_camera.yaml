@@ -6,16 +6,16 @@
 # Section 2: camera source/ros topic
 cam_source:
   - type: "input"
-    source: "rtp://@:5600"
+    source: "rtp://@:5700"
     decoder: "--input-decoder=v4l2"
     codec: "--input-codec=h265"
-  - type: "output"
-    cam: "/tmp/uav_cam0"
     tim: "/tmp/uav_tim0"
     imu: "/tmp/uav_imu"
+  - type: "output"
+    cam: "/tmp/uav_cam0"
 
 # Section 3: enable splitter support
-enable_split: false
+enable_split: true
 
 # Section 4: debug
-enable_debug: true
+enable_debug: false

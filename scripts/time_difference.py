@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 img_timestamp = None
 imu_timestamp = None
 
-img_topic = '/tmp/uav_img'
+img_topic = '/tmp/uav_cam0'
 imu_topic = '/tmp/uav_imu'
 
 ok_count = 0
@@ -38,7 +38,7 @@ delays_bag = []  # List to store rosbag delay values (in ms)
 
 def img_callback(data):
     global img_timestamp
-    img_timestamp = data.stamp  # Assuming the Imu message has a header
+    img_timestamp = data.header.stamp  # Assuming the Imu message has a header
 
 def imu_callback(data):
     global imu_timestamp
@@ -55,7 +55,7 @@ def imu0_callback(data):
 def time_difference():
     global ok_count, ng_count, max_delay, min_delay
 
-    rospy.Subscriber(img_topic, Header, img_callback)
+    rospy.Subscriber(img_topic, Image, img_callback)
     rospy.Subscriber(imu_topic, Imu, imu_callback)
 
     rate = rospy.Rate(10)  # 10 Hz

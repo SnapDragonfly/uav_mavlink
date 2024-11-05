@@ -36,9 +36,31 @@ min_delay_bag = float('inf')
 delays_bag = []  # List to store rosbag delay values (in ms)
 
 
+from collections import deque
+
+# Define the maximum cache size to prevent unlimited memory growth
+MAX_CACHE_SIZE = 100
+img_timestamp_cache = deque(maxlen=MAX_CACHE_SIZE)  # Cache with a fixed size to store recent timestamps
+
 def img_callback(data):
     global img_timestamp
-    img_timestamp = data.header.stamp  # Assuming the Imu message has a header
+    
+    # Get the current timestamp from the message
+    current_timestamp = data.header.stamp
+
+    # Check if the current timestamp is already in the cache
+    if current_timestamp in img_timestamp_cache:
+        # If already cached, skip processing
+        #rospy.loginfo("Duplicate img_timestamp detected, skipping.")
+        return
+
+    # Update the global img_timestamp and add to cache
+    img_timestamp = current_timestamp
+    img_timestamp_cache.append(current_timestamp)  # Add the new timestamp to the cache
+
+    # Continue with other processing steps if needed
+    #rospy.loginfo(f"New img_timestamp received: {img_timestamp.to_sec()}")
+
 
 def imu_callback(data):
     global imu_timestamp
@@ -91,6 +113,21 @@ def time_difference():
                 else:
                     status = "NG"
                     ng_count += 1
+
+                # Check if time difference is less than -500 ms and log timestamps
+                if diff_ms > 500:
+                    rospy.logwarn(f'Large positive delay detected: {diff_ms} ms')
+                    rospy.logwarn(f'img_timestamp: {img_timestamp.to_sec()}')
+                    rospy.logwarn(f'imu_timestamp: {imu_timestamp.to_sec()}')
+                elif diff_ms < -500:
+                    rospy.logwarn(f'Large negative delay detected: {diff_ms} ms')
+                    rospy.logwarn(f'img_timestamp: {img_timestamp.to_sec()}')
+                    rospy.logwarn(f'imu_timestamp: {imu_timestamp.to_sec()}')
+                else:
+                    # For other cases, log with info level
+                    rospy.loginfo(f'Time difference within acceptable range: {diff_ms} ms')
+                    rospy.loginfo(f'img_timestamp: {img_timestamp.to_sec()}')
+                    rospy.loginfo(f'imu_timestamp: {imu_timestamp.to_sec()}')
 
                 # Convert milliseconds and remaining microseconds for aligned logging
                 diff_us = (diff_ns % 1_000_000) // 1_000  # Get remaining microseconds

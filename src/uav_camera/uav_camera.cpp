@@ -96,6 +96,17 @@ const size_t MAX_QUEUE_SIZE = 20;
 std::deque<std_msgs::Header> time_queue;
 std::deque<std_msgs::Header> cache_queue;
 
+void imgStreamReset() 
+{
+    ros::Time img_lastest_time     = ros::Time(0);
+    ros::Time img_previous_time    = ros::Time(0);
+    ros::Time img_local_time       = ros::Time(0);
+    ros::Duration img_min_interval = ros::DURATION_MAX;
+
+    time_queue.clear();
+    cache_queue.clear();
+}
+
 
 void imgMsgCallback(const std_msgs::Header::ConstPtr& msg)
 {
@@ -119,6 +130,10 @@ void imgMsgCallback(const std_msgs::Header::ConstPtr& msg)
         }
     }
     if (exists) {
+        return;
+    }
+
+    if (msg->stamp < img_lastest_time) {
         return;
     }
 
@@ -354,8 +369,11 @@ int main( int argc, char** argv )
         
         if( !input->Capture(&image, &status) )
         {
-            if( status == videoSource::TIMEOUT )
+            if( status == videoSource::TIMEOUT ) {
+                imgStreamReset();
+                LogVerbose("video-viewer:  imgStreamReset");
                 continue;
+            }
             
             break; // EOS
         }

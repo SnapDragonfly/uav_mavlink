@@ -86,12 +86,16 @@ void sig_handler(int signo)
 }
 
 std::mutex img_time_mutex;
-ros::Time img_lastest_time    = ros::Time(0);
-ros::Time img_previous_time   = ros::Time(0);
-ros::Time img_local_time      = ros::Time(0);
+ros::Time img_lastest_time     = ros::Time(0);
+ros::Time img_previous_time    = ros::Time(0);
+ros::Time img_local_time       = ros::Time(0);
+ros::Duration img_min_interval = ros::DURATION_MAX;
 
+
+const size_t MAX_QUEUE_SIZE = 20;
 std::deque<std_msgs::Header> time_queue;
-const size_t MAX_QUEUE_SIZE = 120;
+std::deque<std_msgs::Header> cache_queue;
+
 
 void imgMsgCallback(const std_msgs::Header::ConstPtr& msg)
 {
@@ -100,10 +104,32 @@ void imgMsgCallback(const std_msgs::Header::ConstPtr& msg)
 
     // Check if the queue already contains an entry with the same seq
     for (const auto& header : time_queue) {
-        if (header.seq == msg->seq) {
-            // If we have the same seq, we can skip adding to the queue
+        if (header.seq == msg->seq && header.stamp == msg->stamp) {
+            // If we have the same seq and stamp, skip adding to the queue
             return;
         }
+    }
+
+    // Check if time_queue already contains this timestamp; if so, skip push
+    bool exists = false;
+    for (const auto& header : cache_queue) {
+        if (header.stamp == msg->stamp) {
+            exists = true;
+            break;
+        }
+    }
+    if (exists) {
+        return;
+    }
+
+    cache_queue.push_back(*msg);
+    if (cache_queue.size() > MAX_QUEUE_SIZE) {
+        cache_queue.pop_front();
+    }
+
+    ros::Duration interval = msg->stamp - img_lastest_time;
+    if(interval < img_min_interval) {
+        img_min_interval = interval;
     }
 
     img_previous_time = img_lastest_time;     // Store the previous timestamp
@@ -141,6 +167,12 @@ std_msgs::Header popupHeaderBySeq(uint32_t seq)
 
     // Return an empty header if the seq is not found
     return std_msgs::Header();
+}
+
+size_t getQueueSize()
+{
+    std::lock_guard<std::mutex> lock(img_time_mutex);
+    return time_queue.size();
 }
 
 std::mutex imu_time_mutex;
@@ -356,17 +388,27 @@ int main( int argc, char** argv )
 #if 0
             msg->header.stamp = ros::Time::now();
 #else
+            int tsize = getQueueSize();
             std_msgs::Header img_msg = popupHeaderBySeq(0);
             if (isHeaderEmpty(img_msg)) {
-                msg->header.stamp = img_lastest_time;
+                if (img_min_interval != ros::DURATION_MAX) {
+                    msg->header.stamp = img_lastest_time + img_min_interval - ros::Duration(0, 1000);
+                } else {
+                    msg->header.stamp = img_lastest_time;
+                }
+                
+                //ROS_WARN("img latest   %d.%d", msg->header.stamp.sec, msg->header.stamp.nsec);
             } else {
                 msg->header.stamp = img_msg.stamp;
+                //ROS_INFO("tim(%d) popup %d.%d", tsize, msg->header.stamp.sec, msg->header.stamp.nsec);
             }
 
+#if 0
             if (msg->header.stamp > imu_latest_time || ros::Time(0) == imu_latest_time) {
                 ROS_ERROR("img(%d.%d) comes after imu(%d.%d)", 
                            img_msg.stamp.sec, img_msg.stamp.nsec, imu_latest_time.sec, imu_latest_time.nsec);
             }
+#endif
 #endif
             msg->header.frame_id = "world";
             msg->width = cv_image.cols;

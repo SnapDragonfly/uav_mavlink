@@ -190,17 +190,6 @@ size_t getQueueSize()
     return time_queue.size();
 }
 
-std::mutex imu_time_mutex;
-ros::Time imu_latest_time    = ros::Time(0);
-
-void imuCallback(const sensor_msgs::Imu::ConstPtr& msg)
-{
-    std::lock_guard<std::mutex> lock(imu_time_mutex);
-    //ROS_INFO("Received message on /tmp/uav_imu");
-
-    imu_latest_time = msg->header.stamp;
-}
-
 void config_print(const char* title){
     printf("%s ------------->\n", title);
 
@@ -326,13 +315,11 @@ int main( int argc, char** argv )
 
     ros::Publisher  image_pub;
     ros::Subscriber image_sub;
-    ros::Subscriber imu_sub;
 
     image_pub = nh.advertise<sensor_msgs::Image>(img_topic.c_str(), 1);
     if (enable_split) {
         image_sub = nh.subscribe(tim_topic.c_str(), 1, imgMsgCallback);
-        imu_sub = nh.subscribe(imu_topic.c_str(), 1, imuCallback);
-        LogVerbose("video-viewer:  enable_split %s %s\n", imu_topic.c_str(), tim_topic.c_str());
+        LogVerbose("video-viewer:  enable_split %s\n", tim_topic.c_str());
     }
     /*
      * create input video stream
@@ -371,7 +358,6 @@ int main( int argc, char** argv )
         {
             if( status == videoSource::TIMEOUT ) {
                 imgStreamReset();
-                LogVerbose("video-viewer:  imgStreamReset");
                 continue;
             }
             
@@ -420,13 +406,6 @@ int main( int argc, char** argv )
                 msg->header.stamp = img_msg.stamp;
                 //ROS_INFO("tim(%d) popup %d.%d", tsize, msg->header.stamp.sec, msg->header.stamp.nsec);
             }
-
-#if 0
-            if (msg->header.stamp > imu_latest_time || ros::Time(0) == imu_latest_time) {
-                ROS_ERROR("img(%d.%d) comes after imu(%d.%d)", 
-                           img_msg.stamp.sec, img_msg.stamp.nsec, imu_latest_time.sec, imu_latest_time.nsec);
-            }
-#endif
 #endif
             msg->header.frame_id = "world";
             msg->width = cv_image.cols;

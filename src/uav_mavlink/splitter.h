@@ -10,9 +10,13 @@
 #include <cstring>
 #include <string>
 
+#include <deque>
+#include <utility>  // For std::pair
+
 #include "global.h"
 #include "bridge.h"
 #include "message.h"
+#include "imu_mixer.h"
 #include "time_sync.h"
 
 typedef struct {
@@ -76,6 +80,10 @@ private:
     bool is_valid_rtp_packet(const uint8_t *data, size_t length);
     int forward(unsigned char* buf, int& len);
 
+    bool is_duplicate_timestamp(int sec, int nsec);
+    void add_timestamp_to_cache(int sec, int nsec);
+    void publish_imu_message(const imu_data_t* p_imu_data, ros::Publisher& imu_pub, uint32_t& imu_data_count);
+
     unsigned char buf[RTP_DEFAULT_BUF_LEN];
     struct sockaddr_in udp_addr;
     socklen_t udp_len;
@@ -87,6 +95,9 @@ private:
     struct sockaddr_in splitter_addr;
     socklen_t splitter_len;
     int splitter_fd;
+
+    // Circular buffer to store the last 20 timestamps
+    std::deque<std::pair<int, int>> timestamp_cache;
 
     SyncSystem sys;
 };

@@ -26,6 +26,7 @@
 #define SPLITTER_CAMERA_FRAME_HZ        60
 #define SPLITTER_CAMERA_SYNC_NUM        5000
 #define SPLITTER_CAMERA_THRESHOLD       0.05
+#define SPLITTER_CAMERA_IMU_CACHE       50
 
 class ConfigHandler {
 public:

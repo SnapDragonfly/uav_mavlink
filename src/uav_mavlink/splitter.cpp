@@ -5,7 +5,80 @@
 
 #include "splitter.h"
 #include "rtp_head.h"
-#include "imu_mixer.h"
+#include "config.h"
+
+
+const size_t CACHE_SIZE = SPLITTER_CAMERA_IMU_CACHE;  // Define cache size for 20 timestamps
+
+// Function to check if the current timestamp is in the cache
+// or if it is older than the most recent timestamp
+bool SplitterHandler::is_duplicate_timestamp(int sec, int nsec) {
+    if (!timestamp_cache.empty()) {
+        const auto &latest_ts = timestamp_cache.back();
+        
+        // Check if the new timestamp is older than the latest timestamp
+        if (sec < latest_ts.first || (sec == latest_ts.first && nsec < latest_ts.second)) {
+            ROS_WARN("Latest timestamp: %d.%09d", latest_ts.first, latest_ts.second);
+            ROS_WARN("Current timestamp: %d.%09d", sec, nsec);
+            return true;  // The timestamp is considered "duplicate" (older than the latest)
+        }
+
+        // Check if the timestamp already exists in the cache
+        for (const auto &ts : timestamp_cache) {
+            if (ts.first == sec && ts.second == nsec) {
+                return true;  // Exact duplicate timestamp found
+            }
+        }
+    }
+    return false;
+}
+
+// Function to add a timestamp to the cache
+void SplitterHandler::add_timestamp_to_cache(int sec, int nsec) {
+    if (timestamp_cache.size() >= CACHE_SIZE) {
+        timestamp_cache.pop_front();  // Remove oldest timestamp if cache is full
+    }
+    timestamp_cache.emplace_back(sec, nsec);  // Add new timestamp
+}
+
+void SplitterHandler::publish_imu_message(const imu_data_t* p_imu_data, ros::Publisher& imu_pub, uint32_t& imu_data_count) {
+    if (!(p_imu_data->imu_sec == 0 && p_imu_data->imu_nsec == 0)) {
+
+        // Check for duplicate timestamp
+        if (is_duplicate_timestamp(p_imu_data->imu_sec, p_imu_data->imu_nsec)) {
+            return;  // Skip publishing if timestamp is a duplicate
+        }
+
+        // Create and populate the Imu message
+        sensor_msgs::Imu imu_msg;
+        imu_msg.header.frame_id = "world";
+        imu_msg.header.stamp.sec  = p_imu_data->imu_sec;
+        imu_msg.header.stamp.nsec = p_imu_data->imu_nsec;
+        imu_msg.header.seq        = imu_data_count;
+
+        // Set linear acceleration
+        imu_msg.linear_acceleration.x = p_imu_data->xacc;
+        imu_msg.linear_acceleration.y = p_imu_data->yacc;
+        imu_msg.linear_acceleration.z = p_imu_data->zacc;
+
+        // Set angular velocity
+        imu_msg.angular_velocity.x = p_imu_data->xgyro;
+        imu_msg.angular_velocity.y = p_imu_data->ygyro;
+        imu_msg.angular_velocity.z = p_imu_data->zgyro;
+
+        // Set orientation (quaternion)
+        imu_msg.orientation.w = p_imu_data->q_w;
+        imu_msg.orientation.x = p_imu_data->q_x;
+        imu_msg.orientation.y = p_imu_data->q_y;
+        imu_msg.orientation.z = p_imu_data->q_z;
+
+        imu_pub.publish(imu_msg);
+        imu_data_count++;
+
+        // Add the new timestamp to the cache
+        add_timestamp_to_cache(p_imu_data->imu_sec, p_imu_data->imu_nsec);
+    }
+}
 
 SplitterHandler::SplitterHandler() {
     camera_param.camera_clock_hz = 90000;
@@ -135,36 +208,7 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
 #if (MAVLINK_CODE_DEBUG)
             printf("%02d sec: %u nsec: %u\n", i+1, p_imu_data->imu_sec, p_imu_data->imu_nsec);
 #endif
-            if (!(p_imu_data->imu_sec == 0 && p_imu_data->imu_nsec ==0)) {
-
-                sensor_msgs::Imu imu_msg;
-
-                imu_msg.header.frame_id = "world";
-
-                // Set the timestamp (from imu_sec and imu_nsec)
-                imu_msg.header.stamp.sec  = p_imu_data->imu_sec;
-                imu_msg.header.stamp.nsec = p_imu_data->imu_nsec;
-                imu_msg.header.seq        = imu_data_count;
-                
-                // Set the linear acceleration
-                imu_msg.linear_acceleration.x = p_imu_data->xacc;
-                imu_msg.linear_acceleration.y = p_imu_data->yacc;
-                imu_msg.linear_acceleration.z = p_imu_data->zacc;
-
-                // Set the angular velocity
-                imu_msg.angular_velocity.x = p_imu_data->xgyro;
-                imu_msg.angular_velocity.y = p_imu_data->ygyro;
-                imu_msg.angular_velocity.z = p_imu_data->zgyro;
-
-                // Set the orientation as quaternion
-                imu_msg.orientation.w = p_imu_data->q_w;
-                imu_msg.orientation.x = p_imu_data->q_x;
-                imu_msg.orientation.y = p_imu_data->q_y;
-                imu_msg.orientation.z = p_imu_data->q_z;
-
-                imu_pub.publish(imu_msg);
-                imu_data_count++;
-            }
+            publish_imu_message(p_imu_data, imu_pub, imu_data_count);
             p_imu_data++;
         }
 
@@ -210,36 +254,7 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
 #if (MAVLINK_CODE_DEBUG)
                     printf("%02d sec: %u nsec: %u\n", i+1, p_imu_data->imu_sec, p_imu_data->imu_nsec);
 #endif
-                    if (!(p_imu_data->imu_sec == 0 && p_imu_data->imu_nsec ==0)) {
-
-                        sensor_msgs::Imu imu_msg;
-    
-                        imu_msg.header.frame_id = "world";
-
-                        // Set the timestamp (from imu_sec and imu_nsec)
-                        imu_msg.header.stamp.sec  = p_imu_data->imu_sec;
-                        imu_msg.header.stamp.nsec = p_imu_data->imu_nsec;
-                        imu_msg.header.seq        = imu_data_count;
-                        
-                        // Set the linear acceleration
-                        imu_msg.linear_acceleration.x = p_imu_data->xacc;
-                        imu_msg.linear_acceleration.y = p_imu_data->yacc;
-                        imu_msg.linear_acceleration.z = p_imu_data->zacc;
-
-                        // Set the angular velocity
-                        imu_msg.angular_velocity.x = p_imu_data->xgyro;
-                        imu_msg.angular_velocity.y = p_imu_data->ygyro;
-                        imu_msg.angular_velocity.z = p_imu_data->zgyro;
-
-                        // Set the orientation as quaternion
-                        imu_msg.orientation.w = p_imu_data->q_w;
-                        imu_msg.orientation.x = p_imu_data->q_x;
-                        imu_msg.orientation.y = p_imu_data->q_y;
-                        imu_msg.orientation.z = p_imu_data->q_z;
-
-                        imu_pub.publish(imu_msg);
-                        imu_data_count++;
-                    }
+                    publish_imu_message(p_imu_data, imu_pub, imu_data_count);
                     p_imu_data++;
                 }
             } else {
@@ -256,36 +271,7 @@ int SplitterHandler::update(struct pollfd& pfds, class MessageHandler* message, 
 #if (MAVLINK_CODE_DEBUG)
                     printf("%02d sec: %u nsec: %u\n", i+1, p_imu_data->imu_sec, p_imu_data->imu_nsec);
 #endif
-                    if (!(p_imu_data->imu_sec == 0 && p_imu_data->imu_nsec == 0)) {
-
-                        sensor_msgs::Imu imu_msg;
-    
-                        imu_msg.header.frame_id = "world";
-
-                        // Set the timestamp (from imu_sec and imu_nsec)
-                        imu_msg.header.stamp.sec  = p_imu_data->imu_sec;
-                        imu_msg.header.stamp.nsec = p_imu_data->imu_nsec;
-                        imu_msg.header.seq        = imu_data_count;
-                        
-                        // Set the linear acceleration
-                        imu_msg.linear_acceleration.x = p_imu_data->xacc;
-                        imu_msg.linear_acceleration.y = p_imu_data->yacc;
-                        imu_msg.linear_acceleration.z = p_imu_data->zacc;
-
-                        // Set the angular velocity
-                        imu_msg.angular_velocity.x = p_imu_data->xgyro;
-                        imu_msg.angular_velocity.y = p_imu_data->ygyro;
-                        imu_msg.angular_velocity.z = p_imu_data->zgyro;
-
-                        // Set the orientation as quaternion
-                        imu_msg.orientation.w = p_imu_data->q_w;
-                        imu_msg.orientation.x = p_imu_data->q_x;
-                        imu_msg.orientation.y = p_imu_data->q_y;
-                        imu_msg.orientation.z = p_imu_data->q_z;
-
-                        imu_pub.publish(imu_msg);
-                        imu_data_count++;
-                    }
+                    publish_imu_message(p_imu_data, imu_pub, imu_data_count);
                     p_imu_data++;
                 }
             }
